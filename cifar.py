@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+import pandas as pd
+
 import os
 
 import keras
@@ -8,8 +10,7 @@ import keras.backend as K
 
 from keras.callbacks import TensorBoard
 
-from keras import Input
-from keras.layers import Reshape, Dense, Flatten, Activation, LeakyReLU
+from keras.layers import Input, Reshape, Dense, Flatten, Activation, LeakyReLU
 from keras.models import Sequential, Model
 from keras import regularizers
 
@@ -123,42 +124,17 @@ if K.backend() == "tensorflow":
 # -------------- Train ---------------
 
 nb_epoch = 40
-        
-def _check_array_lengths(inputs, targets, weights=None):
-    """Does user input validation for numpy arrays.
-    # Arguments
-        inputs: list of Numpy arrays of inputs.
-        targets: list of Numpy arrays of targets.
-        weights: list of Numpy arrays of sample weights.
-    # Raises
-        ValueError: in case of incorrectly formatted data.
-    """
-    def set_of_lengths(x):
-        # return a set with the variation between
-        # different shapes, with None => 0
-        if x is None:
-            return {0}
-        else:
-            return set([0 if y is None else y.shape[0] for y in x])
-
-    set_x = set_of_lengths(inputs)
-    set_y = set_of_lengths(targets)
-    if len(set_x) > 1:
-        raise ValueError('All input arrays (x) should have '
-                         'the same number of samples. Got array shapes: ' +
-                         str([x.shape for x in inputs]))
-    if len(set_y) > 1:
-        raise ValueError('All target arrays (y) should have '
-                         'the same number of samples. Got array shapes: ' +
-                         str([y.shape for y in targets]))
-    if set_x and set_y and list(set_x)[0] != list(set_y)[0]:
-        raise ValueError('Input arrays should have '
-                         'the same number of samples as target arrays. '
-                         'Found ' + str(list(set_x)[0]) + ' input samples '
-                         'and ' + str(list(set_y)[0]) + ' target samples.')
 
 history = model.fit(x=xtrain_pyramid, y=ytrain, validation_data=(xtest_pyramid, ytest),
                     callbacks=callbacks, epochs=nb_epoch,
                     batch_size=32)
 
+df = pd.DataFrame(history.history)
+df.to_csv(os.path.join(output_dir, 'history.csv'))
+
+# save models
+g1.save(os.path.join(output_dir, "generator_1.h5"))
+g2.save(os.path.join(output_dir, "generator_2.h5"))
+d1.save(os.path.join(output_dir, "discriminator_1.h5"))
+d2.save(os.path.join(output_dir, "discrimiantor_2.h5"))
 
