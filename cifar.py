@@ -109,10 +109,12 @@ ytest = make_lapgan_targets(num_layers=2, num_samples=xtest.shape[0])
 output_dir='output/lapgan'
 
 # Make a callback to periodically generate images after each epoch
-zsamples = np.random.normal(size=(10 * 10, latent_dim))
+zsamples1 = np.random.normal(size=(10 * 10, latent_dim))
+zsamples2 = np.random.normal(size=(10 * 10, latent_dim))
+base_imgs = xtest_pyramid[0][0:100]
 
 def generator_sampler():
-    return generator.predict(zsamples).reshape((10, 10, 28, 28))
+    return lapgan_generative.predict([zsamples1, zsamples2, base_imgs])[-1].reshape((10, 10, 32, 32, 3))
 
 generator_cb = ImageGridCallback(os.path.join(output_dir, "epoch-{:03d}.png"), generator_sampler)
 
