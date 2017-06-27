@@ -16,10 +16,11 @@ from keras import regularizers
 
 from keras.optimizers import Adam
 
-from lapgan import build_lapgan, make_lapgan_targets, make_gaussian_pyramid, make_laplacian_pyramid
+from lapgan import build_lapgan, make_lapgan_targets, make_mmapped_gaussian_pyramid
 
-from keras_adversarial.image_grid_callback import ImageGridCallback
 from keras_adversarial import AdversarialModel, AdversarialOptimizerAlternating, normal_latent_sampling
+
+from TensorImageCallback import TensorImageCallback
 
 def make_generator(layer_num, output_shape,
                    latent_dim=100, hidden_dim=2048,
@@ -62,11 +63,13 @@ latent_dim = 100
 
 # ------------ Build the Model -------------
 
-g1 = make_generator(0,output_shape=(16,16,3), latent_dim=latent_dim, name="g1")
-g2 = make_generator(1, output_shape=(32,32,3), latent_dim=latent_dim, name="g2")
+# First generator 24x24 --> 48x48
+g1 = make_generator(0,output_shape=(48,48,3), latent_dim=latent_dim, name="g1")
+# Second generator 48x48 --> 96x96
+g2 = make_generator(1, output_shape=(96,96,3), latent_dim=latent_dim, name="g2")
 
-d1 = make_discriminator(0, input_shape=(16,16,3), name="d1")
-d2 = make_discriminator(1, input_shape=(32,32,3), name="d2")
+d1 = make_discriminator(0, input_shape=(48,48,3), name="d1")
+d2 = make_discriminator(1, input_shape=(96,96,3), name="d2")
 
 player_params = [g1.trainable_weights, d1.trainable_weights, g2.trainable_weights, d2.trainable_weights]
 # Player order must be generator/discriminator pairs
@@ -74,7 +77,7 @@ player_params = [g1.trainable_weights, d1.trainable_weights, g2.trainable_weight
 player_names = ["generator_1", "discriminator_1", "generator_2", "discriminator_2"]
 
 lapgan_training, lapgan_generative = build_lapgan([g1, g2], [d1, d2],
-                                                  normal_latent_sampling((latent_dim,)), True, (8,8,3))
+                                                  normal_latent_sampling((latent_dim,)), True, (24,24,3))
 
 model = AdversarialModel(base_model=lapgan_training, player_params=player_params, player_names=player_names)
 
@@ -84,51 +87,68 @@ model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerAlternating(
                           loss='binary_crossentropy')
 
 # ----------------- Data ------------------
+num_samples=128
 
-print("Importing cifar10")
-from keras.datasets import cifar10
-(xtrain, ytrain_cat), (xtest, ytest_cat) = cifar10.load_data()
+print("Importing stl10")
 
-print("Formatting data")
-# Process the data
-xtrain = xtrain.astype(np.float32) / 255.0
-xtest = xtest.astype(np.float32) / 255.0
+import stl10_reader
+stl10_reader.download_and_extract(convert_numpy=True) # Make sure the data is there
+print('Reading data')
 
-print("Building pyramid")
+# Check to see if the unlabeled laplacian pyramid data exists
+
+# We can now read the arrays directly as they have been converted
+# and saved as numpy arrays --> memory map those arrays to save memory
+xtrain = np.load(stl10_reader.UNLABELED_DATA_PATH_NPY, mmap_mode='r')
+xtest = np.load(stl10_reader.TEST_DATA_PATH_NPY, mmap_mode='r')
+
+print("Building gaussian pyramid")
 # Returns a 5-dimensional numpy array
 #(an array of pyramids, which are arrays of 3 channel, 2d images)
-xtrain_pyramid = make_laplacian_pyramid(make_gaussian_pyramid(xtrain, 3, 2))
-ytrain = make_lapgan_targets(num_layers=2, num_samples=xtrain.shape[0])
+xtrain_pyramid_paths = ['./data/stl10_binary/train_X_1.npy','./data/stl10_binary/train_X_2.npy' ]
+xtest_pyramid_paths = ['./data/stl10_binary/test_X_1.npy','./data/stl10_binary/test_X_2.npy' ]
 
-xtest_pyramid = make_laplacian_pyramid(make_gaussian_pyramid(xtest, 3, 2))
+# Reverse the gaussian pyramids so that the smallest layer is first
+xtrain_pyramid = list(reversed(make_mmapped_gaussian_pyramid(xtrain, xtrain_pyramid_paths, 2, limit_samples=num_samples)))
+xtest_pyramid = list(reversed(make_mmapped_gaussian_pyramid(xtest, xtest_pyramid_paths, 2, limit_samples=50000)))
+
+ytrain = make_lapgan_targets(num_layers=2, num_samples=num_samples)
 ytest = make_lapgan_targets(num_layers=2, num_samples=xtest.shape[0])
-
-#xtest_pyramid = lapgan_make_pyramid(xtest, 3, 2)
 
 # -------------- Callbacks -----------------
 
-output_dir='output/cifar'
+output_dir='output/stl'
+
+num_gen_images = 10
 
 # Make a callback to periodically generate images after each epoch
-zsamples1 = np.random.normal(size=(10 * 10, latent_dim))
-zsamples2 = np.random.normal(size=(10 * 10, latent_dim))
+zsamples1 = np.random.normal(size=(num_gen_images, latent_dim))
+zsamples2 = np.random.normal(size=(num_gen_images, latent_dim))
 base_imgs = xtest_pyramid[0][0:100]
 
-def generator_sampler():
-    return lapgan_generative.predict([zsamples1, zsamples2, base_imgs])[-1].reshape((10, 10, 32, 32, 3))
+def image_sampler():
+    results = lapgan_generative.predict([zsamples1, zsamples2, base_imgs])
+    # results contains the base input, the output after layer 1, output after layer 2
+    images = [ base_imgs,
+               results[0].reshape(num_gen_images, 48, 48, 3),
+               results[1].reshape(num_gen_images, 96, 96, 3) ]
+    return images
 
-generator_cb = ImageGridCallback(os.path.join(output_dir, "epoch-{:03d}.png"), generator_sampler)
-
-callbacks = [generator_cb]
+callbacks = []
 if K.backend() == "tensorflow":
-    callbacks.append(
-        TensorBoard(log_dir=os.path.join(output_dir, 'logs'), histogram_freq=0, write_graph=True, write_images=True))
+    tensorboard = TensorBoard(log_dir=os.path.join(output_dir, 'logs'), histogram_freq=0, write_graph=True)
+    imager = TensorImageCallback(['input', 'generated_1', 'generated_2'],
+                                 num_gen_images,
+                                 image_sampler, tensorboard)
+    callbacks.append(imager)
+    callbacks.append(tensorboard)
+
 
 # -------------- Train ---------------
 
 nb_epoch = 40
 
-history = model.fit(x=xtrain_pyramid, y=ytrain, validation_data=(xtest_pyramid, ytest),
+history = model.fit(x=xtrain_pyramid, y=ytrain, validation_data=(xtrain_pyramid, ytrain),
                     callbacks=callbacks, epochs=nb_epoch,
                     batch_size=32)
 
