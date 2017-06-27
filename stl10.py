@@ -87,7 +87,7 @@ model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerAlternating(
                           loss='binary_crossentropy')
 
 # ----------------- Data ------------------
-num_samples=128
+num_samples=10000
 
 print("Importing stl10")
 
@@ -110,10 +110,10 @@ xtest_pyramid_paths = ['./data/stl10_binary/test_X_1.npy','./data/stl10_binary/t
 
 # Reverse the gaussian pyramids so that the smallest layer is first
 xtrain_pyramid = list(reversed(make_mmapped_gaussian_pyramid(xtrain, xtrain_pyramid_paths, 2, limit_samples=num_samples)))
-xtest_pyramid = list(reversed(make_mmapped_gaussian_pyramid(xtest, xtest_pyramid_paths, 2, limit_samples=50000)))
+xtest_pyramid = list(reversed(make_mmapped_gaussian_pyramid(xtest, xtest_pyramid_paths, 2, limit_samples=512)))
 
 ytrain = make_lapgan_targets(num_layers=2, num_samples=num_samples)
-ytest = make_lapgan_targets(num_layers=2, num_samples=xtest.shape[0])
+ytest = make_lapgan_targets(num_layers=2, num_samples=xtest_pyramid[0].shape[0])
 
 # -------------- Callbacks -----------------
 
@@ -148,7 +148,7 @@ if K.backend() == "tensorflow":
 
 nb_epoch = 40
 
-history = model.fit(x=xtrain_pyramid, y=ytrain, validation_data=(xtrain_pyramid, ytrain),
+history = model.fit(x=xtrain_pyramid, y=ytrain, validation_data=(xtest_pyramid, ytest),
                     callbacks=callbacks, epochs=nb_epoch,
                     batch_size=32)
 
