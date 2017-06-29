@@ -6,7 +6,7 @@ The code is python3 compatible so all of the above should be install for python3
 
 So, step by step.
 ### Pip
-First, make sure you have pip installed (`sudo apt install python3-pip` on Ubuntu)
+First, make sure you have pip installed (`sudo apt install python3-pip` on Ubuntu, comes installed with `brew install python3` on OSX)
 
 ### Tensorflow, Keras, Matplotlib, Pandas
 Install through pip (or from source for Tensorflow for the speed boost)
