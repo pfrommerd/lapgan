@@ -28,4 +28,3 @@ class TensorImageCallback(Callback):
                                     feed_dict=img_inputs)
         self.tensorboard.writer.add_summary(summary_str, epoch)
         self.tensorboard.writer.flush()
-

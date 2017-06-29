@@ -8,9 +8,13 @@ import os
 import keras
 import keras.backend as K
 
+from tensorflow.python.client import timeline
+import tensorflow as tf
+
 from keras.callbacks import TensorBoard
 
-from keras.layers import Input, Reshape, Dense, Flatten, Activation, LeakyReLU
+from keras.layers import Input, Reshape, Dense, Flatten, Activation, Dropout, Lambda
+from keras.layers.convolutional import Conv2D
 from keras.models import Sequential, Model
 from keras import regularizers
 
@@ -18,58 +22,87 @@ from keras.optimizers import Adam
 
 from lapgan import build_lapgan, make_lapgan_targets, make_mmapped_gaussian_pyramid
 
-from keras_adversarial import AdversarialModel, AdversarialOptimizerAlternating, normal_latent_sampling
+from keras_adversarial import AdversarialModel, AdversarialOptimizerSimultaneous, normal_latent_sampling
 
 from TensorImageCallback import TensorImageCallback
 
+#'''
 def make_generator(layer_num, output_shape,
-                   latent_dim=100, hidden_dim=2048,
+                   latent_dim, nplanes=128,
                    name="generator", reg=lambda: regularizers.l1_l2(1e-5, 1e-5)):
     # The conditional_input has been upsampled already
-    conditional_input = Input(name="g%d_conditional_input" % layer_num, shape=output_shape)
     latent_input = Input(name="g%d_latent_input" % layer_num, shape=(latent_dim,))
-
-    conditional_flatten = Flatten(name="g%d_flatten" % layer_num)(conditional_input)
-    combined = keras.layers.concatenate([latent_input, conditional_flatten])
-
-    x = Dense(hidden_dim // 4, name="g%d_h1" % layer_num, kernel_regularizer=reg())(combined)
-    a = LeakyReLU(0.2)(x)
-    x = Dense(hidden_dim // 2, name="g%d_h2" % layer_num, kernel_regularizer=reg())(a)
-    a = LeakyReLU(0.2)(x)
-    x = Dense(hidden_dim, name="g%d_h3" % layer_num, kernel_regularizer=reg())(a)
-    a = LeakyReLU(0.2)(x)
-    x = Dense(np.prod(output_shape), name="g%d_x_flat" % layer_num, kernel_regularizer=reg())(a)
-    a = Activation('sigmoid')(x)
+    latent_reshaped = Reshape((output_shape[0], output_shape[1], 1),
+                              name="g%d_reshape" % layer_num)(latent_input)
+    
+    conditional_input = Input(name="g%d_conditional_input" % layer_num, shape=output_shape)
+    
+    combined = keras.layers.concatenate([latent_reshaped, conditional_input])
+    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(),
+               name='g%d_c1' % layer_num)(combined)
+    a = Activation('relu')(x)
+    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(),
+               name='g%d_c2' % layer_num)(a)
+    a = Activation('relu')(x)
+    x = Conv2D(3, (5, 5), padding='same', kernel_regularizer=reg(),
+               name='g%d_c3' % layer_num)(a)
+    a = Activation('tanh')(x)
     r = Reshape(output_shape, name="g%d_x" % layer_num)(a)
 
     model = Model([latent_input, conditional_input], [r], name=name)
     return model
+'''
 
-def make_discriminator(layer_num, input_shape, hidden_dim=1024, reg=lambda: regularizers.l1_l2(1e-5, 1e-5), name="discriminator"):
+def make_generator(layer_num, output_shape,
+                   latent_dim, nplanes=128,
+                   name="generator", reg=lambda: regularizers.l1_l2(1e-5, 1e-5)):
+    latent_input = Input(name="g%d_latent_input" % layer_num, shape=(latent_dim,))
+    conditional_input = Input(name="g%d_conditional_input" % layer_num, shape=output_shape)
+
+    output = Activation('linear')(conditional_input)
+    return Model([latent_input, conditional_input], [output], name=name)
+
+def make_discriminator(layer_num, input_shape, nplanes=128,
+                       reg=lambda: regularizers.l1_l2(1e-5, 1e-5),
+                       name="discriminator"):
     input = Input(name="d%d_input" % layer_num, shape=input_shape)
-    flatten = Flatten(name="d%d_flatten" % layer_num)(input)
-    x = Dense(hidden_dim, name="d%d_h1" % layer_num, kernel_regularizer=reg())(flatten)
-    x = LeakyReLU(0.2)(x)
-    x = Dense(hidden_dim // 2, name="d%d_h2" % layer_num, kernel_regularizer=reg())(x)
-    x = LeakyReLU(0.2)(x)
-    x = Dense(hidden_dim // 4, name="d%d_h3" % layer_num, kernel_regularizer=reg())(x)
-    x = LeakyReLU(0.2)(x)
-    x = Dense(1, name="d%d_y" % layer_num, kernel_regularizer=reg())(x)
-    result = Activation("sigmoid")(x)
+    output = Lambda(lambda x: tf.ones([K.shape(x)[0], 1]))(input)
+    return Model([input], [output], name=name)
+'''
+def make_discriminator(layer_num, input_shape, nplanes=128,
+                       reg=lambda: regularizers.l1_l2(1e-5, 1e-5),
+                       name="discriminator"):
+    input = Input(name="d%d_input" % layer_num, shape=input_shape)
+    x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(),
+               name='d%d_c1' % layer_num)(input)
+    a = Activation('relu')(x)
+    x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(),
+               name='d%d_c2' % layer_num)(a)
+    a = Activation('relu')(x)
+    
+    flattened = Flatten(name='d%d_flatten' % layer_num)(a)
+    a = Activation('relu')(flattened)
+
+    dropout = Dropout(0.5, name='d%d_dropout' % layer_num)(a)
+
+    y = Dense(1, kernel_regularizer=reg(), name='d%d_y' % layer_num)(dropout)
+    
+    result = Activation("sigmoid")(y)
 
     return Model([input], [result], name=name)
-
-latent_dim = 100
-
+#'''
 # ------------ Build the Model -------------
 
 # First generator 24x24 --> 48x48
-g1 = make_generator(0,output_shape=(48,48,3), latent_dim=latent_dim, name="g1")
+g1 = make_generator(0,output_shape=(48,48,3), latent_dim=48*48, name="g1")
 # Second generator 48x48 --> 96x96
-g2 = make_generator(1, output_shape=(96,96,3), latent_dim=latent_dim, name="g2")
+g2 = make_generator(1, output_shape=(96,96,3), latent_dim=96*96, name="g2")
 
 d1 = make_discriminator(0, input_shape=(48,48,3), name="d1")
 d2 = make_discriminator(1, input_shape=(96,96,3), name="d2")
+
+z1 = normal_latent_sampling((48 * 48,))
+z2 = normal_latent_sampling((96 * 96,))
 
 player_params = [g1.trainable_weights, d1.trainable_weights, g2.trainable_weights, d2.trainable_weights]
 # Player order must be generator/discriminator pairs
@@ -77,17 +110,25 @@ player_params = [g1.trainable_weights, d1.trainable_weights, g2.trainable_weight
 player_names = ["generator_1", "discriminator_1", "generator_2", "discriminator_2"]
 
 lapgan_training, lapgan_generative = build_lapgan([g1, g2], [d1, d2],
-                                                  normal_latent_sampling((latent_dim,)), True, (24,24,3))
+                                                  [z1, z2], True, (24,24,3))
 
 model = AdversarialModel(base_model=lapgan_training, player_params=player_params, player_names=player_names)
 
-model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerAlternating(),
+
+# Profiling stuff
+options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+run_metadata = tf.RunMetadata()
+
+model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerSimultaneous(),
                           player_optimizers=[Adam(1e-4, decay=1e-4), Adam(1e-3, decay=1e-4),
                                              Adam(1e-4, decay=1e-4), Adam(1e-3, decay=1e-4)],
-                          loss='binary_crossentropy')
+                          loss='binary_crossentropy',
+                          options=options, run_metadata=run_metadata)
+
+#print(lapgan_training._function_kwargs)
 
 # ----------------- Data ------------------
-num_samples=10000
+num_samples=30000
 
 print("Importing stl10")
 
@@ -115,15 +156,16 @@ xtest_pyramid = list(reversed(make_mmapped_gaussian_pyramid(xtest, xtest_pyramid
 ytrain = make_lapgan_targets(num_layers=2, num_samples=num_samples)
 ytest = make_lapgan_targets(num_layers=2, num_samples=xtest_pyramid[0].shape[0])
 
+
 # -------------- Callbacks -----------------
 
 output_dir='output/stl'
 
-num_gen_images = 10
+num_gen_images = 32
 
 # Make a callback to periodically generate images after each epoch
-zsamples1 = np.random.normal(size=(num_gen_images, latent_dim))
-zsamples2 = np.random.normal(size=(num_gen_images, latent_dim))
+zsamples1 = np.random.normal(size=(num_gen_images, 48*48))
+zsamples2 = np.random.normal(size=(num_gen_images, 96*96))
 base_imgs = xtest_pyramid[0][0:100]
 
 def image_sampler():
@@ -146,7 +188,7 @@ if K.backend() == "tensorflow":
 
 # -------------- Train ---------------
 
-nb_epoch = 40
+nb_epoch = 1
 
 history = model.fit(x=xtrain_pyramid, y=ytrain, validation_data=(xtest_pyramid, ytest),
                     callbacks=callbacks, epochs=nb_epoch,
@@ -154,6 +196,14 @@ history = model.fit(x=xtrain_pyramid, y=ytrain, validation_data=(xtest_pyramid, 
 
 df = pd.DataFrame(history.history)
 df.to_csv(os.path.join(output_dir, 'history.csv'))
+
+# Save profiling
+# Create the Timeline object, and write it to a json file
+fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+chrome_trace = fetched_timeline.generate_chrome_trace_format()
+with open('timeline.json', 'w') as f:
+    f.write(chrome_trace)
+
 
 # save models
 g1.save(os.path.join(output_dir, "generator_1.h5"))

@@ -24,7 +24,7 @@ import numpy as np
 # the function returns as a second result also the full generator stack
 # (regardless of how latent_sampling is set)
 # with (z0, z1, ..., zn) --> (o_n), or (z0, z1, ..., zn, real_g0) --> (o_n)
-def build_lapgan(generators, discriminators, latent_sampling=None, supply_base=False, base_dimensions=None, name="lapgan"):
+def build_lapgan(generators, discriminators, latent_samplers=[], supply_base=False, base_dimensions=None, name="lapgan"):
     input_z_list = [] # The noise inputs
     input_g_list = [] # The gaussian pyramid inputs
     outputs_list = [] # The discriminator outputs
@@ -50,8 +50,8 @@ def build_lapgan(generators, discriminators, latent_sampling=None, supply_base=F
             
         # Random noise z:
         z = generator.inputs[0]
-        if latent_sampling is not None:
-            z = latent_sampling(real_g) # Use the input of real_x to determine the batch size
+        if len(latent_samplers) > idx:
+            z = latent_samplers[idx](real_g) # Use the input of real_x to determine the batch size
         else:
             input_z_list.append(z)
         
@@ -189,16 +189,16 @@ def make_mmapped_gaussian_pyramid(full_res_data, layer_paths, blur_sigma, limit_
 # No longer used as the pyramid is now calculated
 # in-model from the gaussian pyramid to simplify training
 
-# def make_laplacian_pyramid(gaussian_pyramid):
-#    upsample = lambda x: x.repeat(2, 1).repeat(2,2)
-#    
-#    lap_pyramid = []
-#    for prev_layer, layer in zip(reversed(gaussian_pyramid),
-#                                 reversed(gaussian_pyramid[:-1])):
-#        diff = np.subtract(layer, upsample(prev_layer))
-#        lap_pyramid.append(diff)
-#                                 
-#    return lap_pyramid
+def make_laplacian_pyramid(gaussian_pyramid):
+    upsample = lambda x: x.repeat(2, 1).repeat(2,2)
+    
+    lap_pyramid = []
+    for prev_layer, layer in zip(reversed(gaussian_pyramid),
+                                 reversed(gaussian_pyramid[:-1])):
+        diff = np.subtract(layer, upsample(prev_layer))
+        lap_pyramid.append(diff)
+                                 
+    return lap_pyramid
     
 def fix_names(outputs, names):
     if not isinstance(outputs, list):
