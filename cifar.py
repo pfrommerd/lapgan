@@ -8,9 +8,6 @@ import os
 import keras
 import keras.backend as K
 
-from tensorflow.python.client import timeline
-import tensorflow as tf
-
 from keras.callbacks import TensorBoard
 
 from keras.layers import Input, Reshape, Dense, Flatten, Activation, Dropout, Lambda
@@ -46,8 +43,7 @@ def make_generator(layer_num, output_shape,
     a = Activation('relu')(x)
     x = Conv2D(3, (5, 5), padding='same', kernel_regularizer=reg(),
                name='g%d_c3' % layer_num)(a)
-    a = Activation('tanh')(x)
-    r = Reshape(output_shape, name="g%d_x" % layer_num)(a)
+    r = Reshape(output_shape, name="g%d_x" % layer_num)(x)
 
     model = Model([latent_input, conditional_input], [r], name=name)
     return model
@@ -77,11 +73,11 @@ def make_discriminator(layer_num, input_shape, nplanes=128,
 # ------------ Build the Model -------------
 
 # First generator 8x8 --> 16x16
-g1 = make_generator(0,output_shape=(16,16,3), latent_dim=16*16, nplanes=128, name="g1")
+g1 = make_generator(0,output_shape=(16,16,3), latent_dim=16*16, nplanes=64, name="g1")
 # Second generator 16x16 --> 32x32
 g2 = make_generator(1, output_shape=(32,32,3), latent_dim=32*32, nplanes=128, name="g2")
 
-d1 = make_discriminator(0, input_shape=(16,16,3), nplanes=128, name="d1")
+d1 = make_discriminator(0, input_shape=(16,16,3), nplanes=64, name="d1")
 d2 = make_discriminator(1, input_shape=(32,32,3), nplanes=128, name="d2")
 
 z1 = normal_latent_sampling((16 * 16,))
@@ -98,8 +94,8 @@ lapgan_training, lapgan_generative = build_lapgan([g1, g2], [d1, d2],
 model = AdversarialModel(base_model=lapgan_training, player_params=player_params, player_names=player_names)
 
 model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerSimultaneous(),
-                          player_optimizers=[Adam(1e-4, decay=1e-4), Adam(1e-3, decay=1e-4),
-                                             Adam(1e-4, decay=1e-4), Adam(1e-3, decay=1e-4)],
+                          player_optimizers=[Adam(1e-3, decay=1e-4), Adam(1e-3, decay=1e-4),
+                                             Adam(1e-3, decay=1e-4), Adam(1e-3, decay=1e-4)],
                           loss='binary_crossentropy')
                           
 
@@ -135,20 +131,26 @@ num_gen_images = 32
 # Make a callback to periodically generate images after each epoch
 zsamples1 = np.random.normal(size=(num_gen_images, 16*16))
 zsamples2 = np.random.normal(size=(num_gen_images, 32*32))
-base_imgs = xtest_pyramid[0][0:100]
+base_imgs = np.concatenate([xtest_pyramid[0][:16], xtrain_pyramid[0][:16]])
+gt1_imgs = np.concatenate([xtest_pyramid[1][:16], xtrain_pyramid[1][:16]])
+gt2_imgs = np.concatenate([xtest_pyramid[2][:16], xtrain_pyramid[2][:16]])
 
 def image_sampler():
     results = lapgan_generative.predict([zsamples1, zsamples2, base_imgs])
     # results contains the base input, the output after layer 1, output after layer 2
     images = [ base_imgs,
+               gt1_imgs,
+               gt2_imgs,
                results[0].reshape(num_gen_images, 16, 16, 3),
                results[1].reshape(num_gen_images, 32, 32, 3) ]
     return images
 
+image_sampler()
+
 callbacks = []
 if K.backend() == "tensorflow":
     tensorboard = TensorBoard(log_dir=os.path.join(output_dir, 'logs'), histogram_freq=0, write_graph=True)
-    imager = TensorImageCallback(['input', 'generated_1', 'generated_2'],
+    imager = TensorImageCallback(['input', 'gt_1', 'gt_2', 'generated_1', 'generated_2'],
                                  num_gen_images,
                                  image_sampler, tensorboard)
     callbacks.append(imager)
@@ -157,11 +159,11 @@ if K.backend() == "tensorflow":
 
 # -------------- Train ---------------
 
-nb_epoch = 40
+nb_epoch = 60
 
 history = model.fit(x=xtrain_pyramid, y=ytrain, validation_data=(xtest_pyramid, ytest),
                     callbacks=callbacks, epochs=nb_epoch,
-                    batch_size=64)
+                    batch_size=32)
 
 df = pd.DataFrame(history.history)
 df.to_csv(os.path.join(output_dir, 'history.csv'))
