@@ -23,12 +23,12 @@ def vorify(image, cellSize, sigma):
     for region in regions:
         polygon = vert[region]
         mask = rasterize_mask(polygon, (image.shape[0], image.shape[1]))
-        
 
 def rasterize_mask(polygon, shape):
     x, y = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]))
     x, y = x.flatten(), y.flatten()
     points = np.vstack((x,y)).T
+
     path = Path(points)
     grid = path.contains_points(points)
     grid = grid.reshape(shape)
