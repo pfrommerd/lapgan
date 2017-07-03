@@ -27,10 +27,13 @@ from TensorImageCallback import TensorImageCallback
 starting_epoch = 0
 ending_epoch = 60
 
+learn_rate = 1e-3
+decay_rate = 1e-4
+
 output_dir='output/cifar'
 
-training_samples=50000
-testing_samples=1000
+training_samples=100
+testing_samples=100
 
 
 # parse the arguments
@@ -39,6 +42,8 @@ parser.add_argument('--load', nargs=2,
                     help='The starting epoch number and directory from which to load a previous model')
 parser.add_argument('--epochs', nargs=1,
                     help='The number of epochs to train for')
+parser.add_argument('--opt', nargs=2,
+                    help='Set optimizer parameters')
 args = parser.parse_args()
 
 #'''
@@ -114,6 +119,9 @@ if args.load is not None:
 if args.epochs is not None:
     ending_epoch = int(args.epochs[0])
 
+if args.opt is not None:
+    learn_rate = float(args.opt[0])
+    decay_rate = float(args.opt[1])
 
 player_params = [g1.trainable_weights + g2.trainable_weights, d1.trainable_weights + d2.trainable_weights]
 # Player order must be generator/discriminator pairs
@@ -125,8 +133,9 @@ lapgan_training, lapgan_generative = build_lapgan([g1, g2], [d1, d2],
 
 model = AdversarialModel(base_model=lapgan_training, player_params=player_params, player_names=player_names)
 
+optimizers=[Adam(learn_rate,decay=decay_rate), Adam(learn_rate, decay=decay_rate)]
 model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerSimultaneous(),
-                          player_optimizers=[Adam(1e-3, decay=1e-4), Adam(1e-3, decay=1e-4)],
+                          player_optimizers=optimizers,
                           loss='binary_crossentropy')
                           
 
@@ -179,10 +188,14 @@ def image_sampler():
 class ModelSaver(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         # save models
-        g1.save(os.path.join(output_dir, "generator_1.h5"))
-        g2.save(os.path.join(output_dir, "generator_2.h5"))
-        d1.save(os.path.join(output_dir, "discriminator_1.h5"))
-        d2.save(os.path.join(output_dir, "discriminator_2.h5"))
+        g1.save_weights(os.path.join(output_dir, "generator_1.h5"), overwrite=True)
+        g2.save_weights(os.path.join(output_dir, "generator_2.h5"), overwrite=True)
+        d1.save_weights(os.path.join(output_dir, "discriminator_1.h5"), overwrite=True)
+        d2.save_weights(os.path.join(output_dir, "discriminator_2.h5"), overwrite=True)
+        # save optimizers
+        for o in optimizers:
+            print(o.get_weights())
+        
 
 callbacks = [ModelSaver()]
 if K.backend() == "tensorflow":
