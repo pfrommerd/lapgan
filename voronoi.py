@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.spatial
 
-import matplotlib.pyplot as plt
+from matplotlib.nxutils import points_inside_poly
 
 
 def vorify(image, cellSize, sigma):
@@ -19,18 +19,22 @@ def vorify(image, cellSize, sigma):
     vor = scipy.spatial.Voronoi(points)
 
     regions, vert = voronoi_finite_polygons_2d(vor)
-    
+
     for region in regions:
         polygon = vert[region]
-        plt.fill(*zip(*polygon), alpha=0.4)
+        mask = rasterize_mask(polygon, image.shape)
+        print(mask)
 
-    plt.figure(0)
-    plt.plot(points[:,0], points[:,1], 'ko')
-    plt.axis('equal')
-    plt.xlim(vor.min_bound[0] - 0.1, vor.max_bound[0] + 0.1)
-    plt.ylim(vor.min_bound[1] - 0.1, vor.max_bound[1] + 0.1)
-    plt.show()
+def rasterize_mask(polygon, shape):
+    x, y = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]))
+    x, y = x.flatten(), y.flatten()
+    points = np.vstack((x,y)).T
     
+    grid = points_inside_poly(points, poly_verts)
+    grid = grid.reshape(shape)
+
+    return grid
+
 def voronoi_finite_polygons_2d(vor, radius=None):
     if vor.points.shape[1] != 2:
         raise ValueError("Requires 2D input")

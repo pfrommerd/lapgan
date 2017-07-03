@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 import os
+import argparse
 
 import keras
 import keras.backend as K
@@ -22,6 +23,23 @@ from lapgan import build_lapgan, make_lapgan_targets, make_gaussian_pyramid
 from keras_adversarial import AdversarialModel, AdversarialOptimizerSimultaneous, normal_latent_sampling
 
 from TensorImageCallback import TensorImageCallback
+
+starting_epoch = 0
+ending_epoch = 60
+
+output_dir='output/cifar'
+
+training_samples=50000
+testing_samples=1000
+
+
+# parse the arguments
+parser = argparse.ArgumentParser(description='Train a network on the CIFAR10 dataset')
+parser.add_argument('--load', nargs=2,
+                    help='The starting epoch number and directory from which to load a previous model')
+parser.add_argument('--epochs', nargs=1,
+                    help='The number of epochs to train for')
+args = parser.parse_args()
 
 #'''
 def make_generator(layer_num, output_shape,
@@ -83,10 +101,24 @@ d2 = make_discriminator(1, input_shape=(32,32,3), nplanes=128, name="d2")
 z1 = normal_latent_sampling((16 * 16,))
 z2 = normal_latent_sampling((32 * 32,))
 
-player_params = [g1.trainable_weights, d1.trainable_weights, g2.trainable_weights, d2.trainable_weights]
+# Get arguments to see if we need to load from a previous run
+if args.load is not None:
+    print('Loading previously saved model')
+    starting_epoch = int(args.load[0])
+    
+    files = [(d1, 'discriminator_1.h5'),  (d2, 'discriminator_2.h5'), (g1, 'generator_1.h5'), (g2, 'generator_2.h5')]
+    for m, fn in files:
+        file = os.path.join(args.load[1], fn)
+        m.load_weights(file)
+
+if args.epochs is not None:
+    ending_epoch = int(args.epochs[0])
+
+
+player_params = [g1.trainable_weights + g2.trainable_weights, d1.trainable_weights + d2.trainable_weights]
 # Player order must be generator/discriminator pairs
 # due to how make_lapgan_targets data is formatted
-player_names = ["generator_1", "discriminator_1", "generator_2", "discriminator_2"]
+player_names = ["generators", "discriminators"]
 
 lapgan_training, lapgan_generative = build_lapgan([g1, g2], [d1, d2],
                                                   [z1, z2], True, (8,8,3))
@@ -94,8 +126,7 @@ lapgan_training, lapgan_generative = build_lapgan([g1, g2], [d1, d2],
 model = AdversarialModel(base_model=lapgan_training, player_params=player_params, player_names=player_names)
 
 model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerSimultaneous(),
-                          player_optimizers=[Adam(1e-3, decay=1e-4), Adam(1e-3, decay=1e-4),
-                                             Adam(1e-3, decay=1e-4), Adam(1e-3, decay=1e-4)],
+                          player_optimizers=[Adam(1e-3, decay=1e-4), Adam(1e-3, decay=1e-4)],
                           loss='binary_crossentropy')
                           
 
@@ -109,8 +140,8 @@ from keras.datasets import cifar10
 
 print("Formatting data")
 # Process the data
-xtrain = xtrain.astype(np.float32) / 255.0
-xtest = xtest.astype(np.float32) / 255.0
+xtrain = xtrain[:training_samples].astype(np.float32) / 255.0
+xtest = xtest[:testing_samples].astype(np.float32) / 255.0
 
 num_samples=xtrain.shape[0]
 
@@ -118,13 +149,13 @@ num_samples=xtrain.shape[0]
 xtrain_pyramid = list(reversed(make_gaussian_pyramid(xtrain, 3, 2)))
 xtest_pyramid = list(reversed(make_gaussian_pyramid(xtest, 3, 2)))
 
-ytrain = make_lapgan_targets(num_layers=2, num_samples=num_samples)
-ytest = make_lapgan_targets(num_layers=2, num_samples=xtest_pyramid[0].shape[0])
+ytrain = make_lapgan_targets(num_player_pairs=1, num_layers=2,
+                             num_samples=num_samples)
+ytest = make_lapgan_targets(num_player_pairs=1, num_layers=2,
+                            num_samples=xtest_pyramid[0].shape[0])
 
 
 # -------------- Callbacks -----------------
-
-output_dir='output/cifar'
 
 num_gen_images = 32
 
@@ -145,9 +176,15 @@ def image_sampler():
                results[1].reshape(num_gen_images, 32, 32, 3) ]
     return images
 
-image_sampler()
+class ModelSaver(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        # save models
+        g1.save(os.path.join(output_dir, "generator_1.h5"))
+        g2.save(os.path.join(output_dir, "generator_2.h5"))
+        d1.save(os.path.join(output_dir, "discriminator_1.h5"))
+        d2.save(os.path.join(output_dir, "discriminator_2.h5"))
 
-callbacks = []
+callbacks = [ModelSaver()]
 if K.backend() == "tensorflow":
     tensorboard = TensorBoard(log_dir=os.path.join(output_dir, 'logs'), histogram_freq=0, write_graph=True)
     imager = TensorImageCallback(['input', 'gt_1', 'gt_2', 'generated_1', 'generated_2'],
@@ -159,18 +196,9 @@ if K.backend() == "tensorflow":
 
 # -------------- Train ---------------
 
-nb_epoch = 60
-
 history = model.fit(x=xtrain_pyramid, y=ytrain, validation_data=(xtest_pyramid, ytest),
-                    callbacks=callbacks, epochs=nb_epoch,
+                    callbacks=callbacks, epochs=ending_epoch, initial_epoch=starting_epoch,
                     batch_size=32)
 
 df = pd.DataFrame(history.history)
 df.to_csv(os.path.join(output_dir, 'history.csv'))
-
-# save models
-g1.save(os.path.join(output_dir, "generator_1.h5"))
-g2.save(os.path.join(output_dir, "generator_2.h5"))
-d1.save(os.path.join(output_dir, "discriminator_1.h5"))
-d2.save(os.path.join(output_dir, "discrimiantor_2.h5"))
-

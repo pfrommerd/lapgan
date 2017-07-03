@@ -136,7 +136,7 @@ def build_lapgan(generators, discriminators, latent_samplers=[], supply_base=Fal
 # Shoud return [generator_yfake0, generator_yreal0, discriminator_yfake0, discriminator_yreal0, ...]
 # So this should be [1 , 0 (can be anythign really as the generator is not affected), 0, 1] repeated by the
 # number of layers we have
-def make_lapgan_targets(num_layers, num_samples):
+def make_lapgan_targets(num_player_pairs, num_layers, num_samples):
     # For each player we need to give the desired
     # outputs to all layers, even if the player is not affecting
     # other layers
@@ -150,7 +150,7 @@ def make_lapgan_targets(num_layers, num_samples):
     single_discriminator = [discriminator_fake, discriminator_real] * num_layers
 
     # We assume that the player order are generator/discriminator pairs
-    return (single_generator + single_discriminator) * num_layers
+    return (single_generator + single_discriminator) * num_player_pairs
 
 # Will downsample by factors of 2, n times
 def make_gaussian_pyramid(full_res_data, num_layers, blur_sigma):
