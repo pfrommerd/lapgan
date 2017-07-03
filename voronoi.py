@@ -1,8 +1,8 @@
 import numpy as np
-import numpy.ma
 import scipy.spatial
 
 from matplotlib.path import Path
+import matplotlib.pyplot as plt
 
 def vorify(image, cellSize, sigma):
     # Generate a grid of points
@@ -20,20 +20,28 @@ def vorify(image, cellSize, sigma):
 
     regions, vert = voronoi_finite_polygons_2d(vor)
 
+    result = np.zeros(image.shape)
     for region in regions:
         polygon = vert[region]
-        mask = rasterize_mask(polygon, (image.shape[0], image.shape[1]))
+        mask = np.expand_dims(rasterize_mask(polygon, (image.shape[0], image.shape[1])), axis=2)
+        num_pixels = np.sum(mask)
+        if num_pixels > 0:
+            pixel_sum = np.sum(image * mask, axis=(0,1)) / num_pixels
+            mask = np.repeat(mask, 3, axis=2)
+            result += mask * pixel_sum
+
+    return result
 
 def rasterize_mask(polygon, shape):
     x, y = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]))
     x, y = x.flatten(), y.flatten()
     points = np.vstack((x,y)).T
 
-    path = Path(points)
+    path = Path(polygon)
     grid = path.contains_points(points)
     grid = grid.reshape(shape)
 
-    return grid
+    return grid.astype(int)
 
 def voronoi_finite_polygons_2d(vor, radius=None):
     if vor.points.shape[1] != 2:
@@ -103,4 +111,7 @@ if __name__ == '__main__':
     xtrain = xtrain.astype(np.float32) / 255.0
     xtest = xtest.astype(np.float32) / 255.0
     
-    vorify(xtest[0], [4,4], 1)
+    result = vorify(xtest[0], [2,2], 1)
+
+    plt.imshow(result)
+    plt.show()
