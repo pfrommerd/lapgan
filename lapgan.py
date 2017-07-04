@@ -137,21 +137,25 @@ def build_lapgan(generators, discriminators, latent_samplers=[], supply_base=Fal
 # Shoud return [generator_yfake0, generator_yreal0, discriminator_yfake0, discriminator_yreal0, ...]
 # So this should be [1 , 0 (can be anythign really as the generator is not affected), 0, 1] repeated by the
 # number of layers we have
-def make_lapgan_targets(num_player_pairs, num_layers, num_samples):
-    # For each player we need to give the desired
-    # outputs to all layers, even if the player is not affecting
-    # other layers
-    generator_fake = np.ones((num_samples, 1))
-    generator_real = np.zeros((num_samples, 1))
-    discriminator_fake = np.zeros((num_samples, 1))
-    discriminator_real = np.ones((num_samples, 1))
+def lapgan_targets_generator(pyramid_generator, num_player_pairs):
+    for batch in pyramid_generator:
+        # Batch is a list of each layer, subtract a layer as 1 is the input
+        num_layers = len(batch) - 1
+        num_samples = batch[0].shape[0] # Number of samples in a batch
+        # For each player we need to give the desired
+        # outputs to all layers, even if the player is not affecting
+        # other layers
+        generator_fake = np.ones((num_samples, 1))
+        generator_real = np.zeros((num_samples, 1))
+        discriminator_fake = np.zeros((num_samples, 1))
+        discriminator_real = np.ones((num_samples, 1))
 
-    # The desired outputs for all layers for a single generator and discriminator
-    single_generator = [generator_fake, generator_real] * num_layers
-    single_discriminator = [discriminator_fake, discriminator_real] * num_layers
+        # The desired outputs for all layers for a single generator and discriminator
+        single_generator = [generator_fake, generator_real] * num_layers
+        single_discriminator = [discriminator_fake, discriminator_real] * num_layers
 
-    # We assume that the player order are generator/discriminator pairs
-    return (single_generator + single_discriminator) * num_player_pairs
+        # We assume that the player order are generator/discriminator pairs
+        yield (batch, (single_generator + single_discriminator) * num_player_pairs)
 
 # Will downsample by factors of 2, n times
 def make_gaussian_pyramid(full_res_data, num_layers, blur_sigma):
