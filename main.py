@@ -22,12 +22,7 @@ if args.config is not None:
 params = config.get_config_params(args)
 
 # Get the data
+print('Reading data...')
 (training_data, test_data) = config.read_data(params)
 
 import matplotlib.pyplot as plt
-
-imgs = next(training_data)
-print(imgs[0].shape)
-
-plt.imshow(imgs[0])
-plt.show()

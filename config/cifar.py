@@ -1,52 +1,77 @@
-from keras.layers import Input, Reshape, Dense, Flatten, Activation, Dropout, Lambda
-from keras.layers.convolutional import Conv2D
-from keras.models import Sequential, Model
-from keras import regularizers
+#from keras.layers import Input, Reshape, Dense, Flatten, Activation, Dropout, Lambda
+#from keras.layers.convolutional import Conv2D
+#from keras.models import Sequential, Model
+#from keras import regularizers
 
-from keras.optimizers import Adam
-from lapgan import build_lapgan, make_lapgan_targets, make_gaussian_pyramid
+#from keras.optimizers import Adam
+#from lapgan import build_lapgan, make_lapgan_targets, make_gaussian_pyramid
 
-from keras_adversarial import AdversarialModel, AdversarialOptimizerSimultaneous, normal_latent_sampling
+#from keras_adversarial import AdversarialModel, AdversarialOptimizerSimultaneous, normal_latent_sampling
 
-import dataio as dataio
+import dataio
 
 import os
 
 import numpy as np
+import utils
+
+import voronoi
+
+TRAIN_FILES = ['data_batch_1.bin', 'data_batch_2.bin',
+               'data_batch_3.bin', 'data_batch_4.bin',
+               'data_batch_5.bin']
+TEST_FILES = ['test_batch.bin']
 
 def get_config_params(args):
-    return {'data-dir': './data', 'batch_size': 32}
+    return {'data-dir': './data/cifar', 'data_batch_size': 256, 'use-voronoi': False}
     
 # Downloads and processes data to a subdirectory in directory
 # returns the training data and testing data pyramids as two lists in a tuple
 def read_data(params):
     data_directory = params['data-dir']
     
-    files = dataio.join_files(data_directory,
-                              ['cifar/data_batch_1.bin', 'cifar/data_batch_2.bin',
-                               'cifar/data_batch_3.bin', 'cifar/data_batch_4.bin',
-                               'cifar/data_batch_5.bin', 'cifar/test_batch.bin'])
+    train_files = dataio.join_files(data_directory, TRAIN_FILES)
+    test_files = dataio.join_files(data_directory, TEST_FILES)
 
     dataio.cond_wget_untar(data_directory,
-                           files,
+                           train_files + test_files,
                            'https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz',
-                           renameDir=('cifar-10-batches-bin', 'cifar'))
+                           renameFiles=[zip(dataio.join_files('cifar-10-batches-bin', TRAIN_FILES + TEST_FILES),
+                                            dataio.join_files(data_directory, TRAIN_FILES + TEST_FILES))])
 
     # Images are 32x32x3 bytes, with an extra byte at the start for the label
-    batchSize = params['batch_size']
+    batchSize = params['data_batch_size']
     chunkSize = batchSize * (32 * 32 * 3 + 1)
 
-    train_chunk_generator = dataio.files_chunk_generator(files, chunkSize)
+    train_chunk_generator = dataio.files_chunk_generator(train_files, chunkSize)
+    test_chunk_generator = dataio.files_chunk_generator(test_files, chunkSize)
 
-    def image_processor(chunks):
+    def image_parser(chunks):
         for chunk in chunks:
             # Remove the label byte
             chunk = np.delete(chunk, np.arange(0, chunk.size, 32*32*3+1))
             img = np.reshape(chunk, (batchSize, 3, 32, 32))
-            img = np.transpose(img, (0, 3, 2, 1))
+            img = np.transpose(img, (0, 2, 3, 1)).astype(np.float32) / 255.0
             yield img
     
-    return (image_processor(train_chunk_generator),None)
+    train_images = image_parser(train_chunk_generator)
+    test_images = image_parser(test_chunk_generator)
+
+    def pyramid_generator(imgs):
+        if params['use-voronoi']:
+            layer1 = lambda x: x # First layer just returns the original
+            layer2 = lambda x: utils.blur_downsample(voronoi.vorify_batch(x, [2, 2], 2), 2)
+            layer3 = lambda x: utils.blur_downsample(utils.blur_downsample(voronoi.vorify_batch(x, [4, 4], 2), 2), 1)
+        else:
+            layer1 = lambda x: x # First layer just returns the original
+            layer2 = lambda x: utils.blur_downsample(x, 2)
+            layer3 = lambda x: utils.blur_downsample(utils.blur_downsample(x, 2), 1)
+            
+        # Build a pyramid
+        return utils.list_simultaneous_ops(imgs, [layer1, layer2, layer3])
+        
+    return (pyramid_generator(train_images), pyramid_generator(test_images))
+
 
 # Returns a tuple containing a training model and an evaluation model
 def make_model():   

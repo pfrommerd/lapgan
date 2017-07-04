@@ -4,6 +4,9 @@ import scipy.spatial
 from matplotlib.path import Path
 import matplotlib.pyplot as plt
 
+def vorify_batch(image_batch, cellSize, sigma):
+    return np.array([vorify(im, cellSize, sigma) for im in image_batch])
+
 def vorify(image, cellSize, sigma):
     # Generate a grid of points
     x, y = np.mgrid[cellSize[0] // 2:image.shape[0] - cellSize[0] // 2:cellSize[0],

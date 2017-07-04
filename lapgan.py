@@ -4,6 +4,7 @@ from keras.models import Model
 from keras.layers import Activation, UpSampling2D, Input, Lambda
 import keras.layers
 import keras.backend as K
+from keras.layers.merge import _Merge
 
 import utils
 
@@ -71,7 +72,7 @@ def build_lapgan(generators, discriminators, latent_samplers=[], supply_base=Fal
             real_g_previous = UpSampling2D(size=(2,2))(real_g_previous)
 
             # Get the real_x delta between real_g and real_g_previous
-            real_x = utils.subtract([real_g, real_g_previous])
+            real_x = _subtract([real_g, real_g_previous])
 
             yfake = Activation("linear", name=("yfake_%d" % idx))(discriminator(generator([z, real_g_previous])))
             yreal = Activation("linear", name=("yreal_%d" % idx))(discriminator(real_x)) # Learn the delta
@@ -207,3 +208,29 @@ def fix_names(outputs, names):
     if not isinstance(names, list):
         names = [names]
     return [Activation('linear', name=name)(output) for output, name in zip(outputs, names)]
+
+
+
+class _Subtract(_Merge):
+    """Layer that subtracts 2 inputs
+    It takes 2 tensor inputs
+    of the same shape and returns the difference
+    between the first and the second (input1 - input2)
+    """
+
+    def _merge_function(self, inputs):
+        if len(inputs) < 2:
+            raise ValueError('Subtract layer needs at least 2 inputs')
+        output = inputs[0] - inputs[1]
+        return output
+
+
+def _subtract(inputs, **kwargs):
+    """Functional interface to the `Subtract` layer.
+    # Arguments
+        inputs: A list of 2 input tensors
+        **kwargs: Standard layer keyword arguments.
+    # Returns
+        A tensor, the sum of the inputs.
+    """
+    return _Subtract(**kwargs)(inputs)

@@ -1,25 +1,23 @@
-from keras.layers.merge import _Merge
+from scipy.ndimage.filters import gaussian_filter
+import numpy as np
 
-class Subtract(_Merge):
-    """Layer that subtracts 2 inputs
-    It takes 2 tensor inputs
-    of the same shape and returns the difference
-    between the first and the second (input1 - input2)
-    """
+def replicate_data(input, num_tee):
+    for i in input:
+        for n in range(num_tee):
+            yield i
 
-    def _merge_function(self, inputs):
-        if len(inputs) < 2:
-            raise ValueError('Subtract layer needs at least 2 inputs')
-        output = inputs[0] - inputs[1]
-        return output
+def blur(images, sigma):
+    return gaussian_filter(images, (0, sigma, sigma, 0))
 
+def downsample(images):
+    return images[:,::2,::2,:]
 
-def subtract(inputs, **kwargs):
-    """Functional interface to the `Add` layer.
-    # Arguments
-        inputs: A list of 2 input tensors
-        **kwargs: Standard layer keyword arguments.
-    # Returns
-        A tensor, the sum of the inputs.
-    """
-    return Subtract(**kwargs)(inputs)
+def blur_downsample(images, sigma):
+    return downsample(blur(images,sigma))
+
+def list_simultaneous_ops(images, layer_ops):
+    for i in images:
+        output = []
+        for f in layer_ops:
+            output.append(f(i))
+        yield output
