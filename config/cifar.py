@@ -44,7 +44,7 @@ def read_data(params):
     dataio.cond_wget_untar(data_directory,
                            train_files + test_files,
                            'https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz',
-                           renameFiles=zip(dataio.join_files('cifar-10-batches-bin', TRAIN_FILES + TEST_FILES),
+                            moveFiles=zip(dataio.join_files('cifar-10-batches-bin', TRAIN_FILES + TEST_FILES),
                                             dataio.join_files(data_directory, TRAIN_FILES + TEST_FILES)))
 
     # Images are 32x32x3 bytes, with an extra byte at the start for the label

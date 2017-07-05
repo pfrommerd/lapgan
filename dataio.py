@@ -1,6 +1,6 @@
 import sys
 import itertools
-import os, sys, tarfile
+import os, sys, tarfile, shutil
 import numpy as np
 
 import tempfile
@@ -34,7 +34,7 @@ def files_chunk_generator(files, chunkSize):
                 else:
                     break
 
-def cond_wget_untar(dest_dir, conditional_files, wget_url, renameFiles=()):
+def cond_wget_untar(dest_dir, conditional_files, wget_url, moveFiles=()):
     if not os.path.exists(dest_dir):
         os.makedirs(dest_dir)
 
@@ -53,8 +53,8 @@ def cond_wget_untar(dest_dir, conditional_files, wget_url, renameFiles=()):
         print('Downloaded %s, extracting...' % filename)
         tarfile.open(filepath, 'r:gz').extractall(tempfile.gettempdir())
 
-        for src, tgt in renameFiles:
-            os.rename(os.path.join(tempfile.gettempdir(), src), tgt)
+        for src, tgt in moveFiles:
+            shutil.move(os.path.join(tempfile.gettempdir(), src), tgt)
 
 def join_files(dir, files):
     return [os.path.join(dir, f) for f in files]
