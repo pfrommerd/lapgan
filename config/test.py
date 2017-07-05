@@ -30,7 +30,7 @@ def get_config_params(args):
             'output-dir': './output/cifar',
             'initial-epoch': 0,
             'epochs': 200,
-            'steps-per-epoch': 390, #~50000 images (390 * 128)
+            'steps-per-epoch': 1562, #~50000 images (1562*32)
             'validation-steps': 1,
             'batch-size': 32,
             'use-voronoi': False}
