@@ -16,8 +16,6 @@ import os
 import numpy as np
 import utils
 
-import voronoi
-
 TRAIN_FILES = ['data_batch_1.bin', 'data_batch_2.bin',
                'data_batch_3.bin', 'data_batch_4.bin',
                'data_batch_5.bin']
@@ -75,6 +73,7 @@ def read_data(params):
 
     def pyramid_generator(image_label):
         if params['use-voronoi']:
+            import voronoi
             # x's are the (imgs, labels) tuples
             layer3 = lambda x: x[0] # just returns the original
             layer2 = lambda x: utils.blur_downsample(voronoi.vorify_batch(x[0], [2, 2], 2), 2)
