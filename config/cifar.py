@@ -67,6 +67,7 @@ def read_data(params):
             num_images = chunk.size // (32*32*3)
 
             imgs = np.reshape(chunk, (num_images, 3, 32, 32))
+
             imgs = np.transpose(imgs, (0, 2, 3, 1)).astype(np.float32) / 255.0
             yield (imgs, labels)
     
@@ -125,7 +126,7 @@ def build_model(params):
     model = AdversarialModel(base_model=lapgan_training, player_params=player_params, player_names=player_names)
 
     model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerSimultaneous(),
-                              player_optimizers=[Adam(1e-3, decay=1e-4), Adam(1e-3, decay=1e-4)],
+                              player_optimizers=[Adam(1e-3, decay=1e-5), Adam(1e-4, decay=1e-4)],
                               loss='binary_crossentropy')
 
     # Now make a model saver and an image sampler
