@@ -16,6 +16,8 @@ import os
 import numpy as np
 import utils
 
+import voronoi
+
 TRAIN_FILES = ['data_batch_1.bin', 'data_batch_2.bin',
                'data_batch_3.bin', 'data_batch_4.bin',
                'data_batch_5.bin']
@@ -26,9 +28,9 @@ def get_config_params(args):
             'output-dir': './output/cifar',
             'initial-epoch': 0,
             'epochs': 200,
-            'steps-per-epoch': 782, #~50000 images (390 * 128)
+            'steps-per-epoch': 390, #~50000 images (390 * 128)
             'validation-steps': 1,
-            'batch-size': 64,
+            'batch-size': 32,
             'use-voronoi': False}
     
 # Downloads and processes data to a subdirectory in directory
@@ -74,7 +76,6 @@ def read_data(params):
 
     def pyramid_generator(image_label):
         if params['use-voronoi']:
-            import voronoi
             # x's are the (imgs, labels) tuples
             layer3 = lambda x: x[0] # just returns the original
             layer2 = lambda x: utils.blur_downsample(voronoi.vorify_batch(x[0], [2, 2], 2), 2)
@@ -83,11 +84,8 @@ def read_data(params):
             layer3 = lambda x: x[0] # just returns the original
             layer2 = lambda x: utils.blur_downsample(x[0], 2)
             layer1 = lambda x: utils.blur_downsample(utils.blur_downsample(x[0], 2), 1)
-
-        labels = lambda x: x[1]
-            
         # Build a pyramid
-        return utils.list_simultaneous_ops(image_label, [layer1, layer2, layer3, labels])
+        return utils.list_simultaneous_ops(image_label, [layer1, layer2, layer3])
 
     train_pyramid = pyramid_generator(train_images)
     test_pyramid = pyramid_generator(test_images)
@@ -121,11 +119,11 @@ def build_model(params):
     player_names = ["generators", "discriminators"]
 
     lapgan_training, lapgan_generative = build_lapgan([g1, g2], [d1, d2],
-                                                      [z1, z2], True, (8,8,3), True, 10)
+                                                      [z1, z2], True, (8,8,3), False, 10)
     model = AdversarialModel(base_model=lapgan_training, player_params=player_params, player_names=player_names)
 
     model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerSimultaneous(),
-                              player_optimizers=[Adam(1e-3, decay=1e-5), Adam(1e-4, decay=1e-4)],
+                              player_optimizers=[Adam(1e-3, decay=1e-4), Adam(1e-3, decay=1e-4)],
                               loss='binary_crossentropy')
 
     # Now make a model saver and an image sampler
@@ -162,16 +160,7 @@ def _make_generator(layer_num, output_shape, num_classes,
                               name="g%d_reshape" % layer_num)(latent_input)
     
     conditional_input = Input(name="g%d_conditional_input" % layer_num, shape=output_shape)
-    class_input = Input(name="g%d_class_input" % layer_num, shape=(num_classes,))
-
-    # Put the class input through a dense layer
-    class_dense = Dense(output_shape[0]*output_shape[1]*1,
-                        kernel_regularizer=reg())(class_input)
-
-    class_reshaped=Reshape((output_shape[0], output_shape[1], 1),
-                           name="g%d_reshape_class" % layer_num)(class_dense)
-    
-    combined = keras.layers.concatenate([latent_reshaped, conditional_input, class_reshaped])
+    combined = keras.layers.concatenate([latent_reshaped, conditional_input])
     x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(),
                name='g%d_c1' % layer_num)(combined)
     a = Activation('relu')(x)
@@ -182,7 +171,7 @@ def _make_generator(layer_num, output_shape, num_classes,
                name='g%d_c3' % layer_num)(a)
     r = Reshape(output_shape, name="g%d_x" % layer_num)(x)
 
-    model = Model([latent_input, conditional_input, class_input], [r], name=name)
+    model = Model([latent_input, conditional_input], [r], name=name)
     return model
 
 def _make_discriminator(layer_num, input_shape, nplanes=128,
