@@ -28,9 +28,9 @@ def get_config_params(args):
             'output-dir': './output/cifar',
             'initial-epoch': 0,
             'epochs': 200,
-            'steps-per-epoch': 390, #~50000 images (390 * 128)
+            'steps-per-epoch': 782, #~50000 images (390 * 128)
             'validation-steps': 1,
-            'batch-size': 32,
+            'batch-size': 64,
             'use-voronoi': False}
     
 # Downloads and processes data to a subdirectory in directory
