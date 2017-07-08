@@ -2,7 +2,6 @@ import numpy as np
 import scipy.spatial
 
 from matplotlib.path import Path
-import matplotlib.pyplot as plt
 
 def vorify_batch(image_batch, cellSize, sigma):
     return np.array([vorify(im, cellSize, sigma) for im in image_batch])
@@ -108,6 +107,7 @@ def voronoi_finite_polygons_2d(vor, radius=None):
     return new_regions, np.asarray(new_vertices)
 
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
     from keras.datasets import cifar10
     (xtrain, ytrain_cat), (xtest, ytest_cat) = cifar10.load_data()
     # Process the data
