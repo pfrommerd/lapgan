@@ -1,4 +1,6 @@
 from keras.layers import Input, Reshape, Dense, Flatten, Activation, Dropout, Lambda
+from keras.layers.advanced_activations import LeakyReLU
+from keras.layers.normalization import BatchNormalization
 from keras.layers.convolutional import Conv2D
 from keras.models import Sequential, Model
 import keras.regularizers
@@ -26,7 +28,7 @@ def get_config_params(args):
             'output-dir': './output/cifar',
             'initial-epoch': 0,
             'epochs': 200,
-            'steps-per-epoch': 782, #~50000 images (390 * 128)
+            'steps-per-epoch': 782, #~50000 images (782 * 64)
             'validation-steps': 1,
             'batch-size': 64,
             'use-voronoi': False}
@@ -172,14 +174,18 @@ def _make_generator(layer_num, output_shape, num_classes,
                            name="g%d_reshape_class" % layer_num)(class_dense)
     
     combined = keras.layers.concatenate([latent_reshaped, conditional_input, class_reshaped])
+    normalized = BatchNormalization(axis=1)(combined)
     x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(),
                name='g%d_c1' % layer_num)(combined)
-    a = Activation('relu')(x)
+    a = LeakyReLU(alpha=0.3)(x)
     x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(),
                name='g%d_c2' % layer_num)(a)
-    a = Activation('relu')(x)
+    a = LeakyReLU(alpha=0.3)(x)
     x = Conv2D(3, (5, 5), padding='same', kernel_regularizer=reg(),
                name='g%d_c3' % layer_num)(a)
+    a = LeakyReLU(alpha=0.3)(x)
+    x = Conv2D(3, (5, 5), padding='same', kernel_regularizer=reg(),
+               name='g%d_c4' % layer_num)(a)
     r = Reshape(output_shape, name="g%d_x" % layer_num)(x)
 
     model = Model([latent_input, conditional_input, class_input], [r], name=name)
@@ -189,19 +195,21 @@ def _make_discriminator(layer_num, input_shape, nplanes=128,
                        reg=lambda: keras.regularizers.l1_l2(1e-5, 1e-5),
                        name="discriminator"):
     input = Input(name="d%d_input" % layer_num, shape=input_shape)
+    normalized = BatchNormalization(axis=1)(input)
     x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(),
-               name='d%d_c1' % layer_num)(input)
-    a = Activation('relu')(x)
+               name='d%d_c1' % layer_num)(normalized)
+    a = LeakyReLU(alpha=0.3)(x)
     x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(),
                name='d%d_c2' % layer_num)(a)
-    a = Activation('relu')(x)
+    a = LeakyReLU(alpha=0.3)(x)
+    x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(),
+               name='d%d_c3' % layer_num)(a)
+    a = LeakyReLU(alpha=0.3)(x)
     
     flattened = Flatten(name='d%d_flatten' % layer_num)(a)
     a = Activation('relu')(flattened)
 
-    dropout = Dropout(0.5, name='d%d_dropout' % layer_num)(a)
-
-    y = Dense(1, kernel_regularizer=reg(), name='d%d_y' % layer_num)(dropout)
+    y = Dense(1, kernel_regularizer=reg(), name='d%d_y' % layer_num)(flattened)
     
     result = Activation("sigmoid")(y)
 
