@@ -25,7 +25,7 @@ TEST_FILES = ['test_batch.bin']
 
 def get_config_params(args):
     return {'data-dir': './data/cifar',
-            'output-dir': './output/cifar',
+            'output-dir': './output/cifar_noclass',
             'initial-epoch': 0,
             'epochs': 200,
             'steps-per-epoch': 390, #~50000 images (390 * 128)
@@ -131,9 +131,8 @@ def build_model(params):
         base_imgs = image_pyramid[0]
         gt1_imgs = image_pyramid[1]
         gt2_imgs = image_pyramid[2]
-        class_conditionals = image_pyramid[3]
         num_gen_images = image_pyramid[0].shape[0]
-        results = lapgan_generative.predict([zsamples1, zsamples2, base_imgs, class_conditionals])
+        results = lapgan_generative.predict([zsamples1, zsamples2, base_imgs])
         # results contains the base input, the output after layer 1, output after layer 2
         images = [ ('input', base_imgs),
                    ('gt1', gt1_imgs),
