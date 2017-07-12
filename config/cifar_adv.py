@@ -1,15 +1,20 @@
-from keras.layers import Input, Reshape, Dense, Flatten, Activation, Dropout, Lambda
-from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.normalization import BatchNormalization
-from keras.layers.convolutional import Conv2D
-from keras.models import Sequential, Model
-import keras.regularizers
-import keras.layers
+try:
+    import keras
+    from keras.layers import Input, Reshape, Dense, Flatten, Activation, Dropout, Lambda
+    from keras.layers.advanced_activations import LeakyReLU
+    from keras.layers.normalization import BatchNormalization
+    from keras.layers.convolutional import Conv2D
+    from keras.models import Sequential, Model
+    import keras.regularizers
+    import keras.layers
 
-from keras.optimizers import Adam
-from lapgan import build_lapgan, lapgan_targets_generator
+    from keras.optimizers import Adam
+    from lapgan import build_lapgan
 
-from keras_adversarial import AdversarialModel, AdversarialOptimizerSimultaneous, normal_latent_sampling
+    from keras_adversarial import AdversarialModel, AdversarialOptimizerAlternating, normal_latent_sampling
+
+except ImportError:
+    print("Disabling Keras functionality...")
 
 import dataio
 
@@ -94,8 +99,8 @@ def read_data(params):
     train_pyramid = pyramid_generator(train_images)
     test_pyramid = pyramid_generator(test_images)
     sample_data = next(test_pyramid)
-    return (lapgan_targets_generator(train_pyramid, 1, 2),
-            lapgan_targets_generator(test_pyramid, 1, 2), sample_data)
+    return (utils.lapgan_targets_generator(train_pyramid, 1, 2),
+            utils.lapgan_targets_generator(test_pyramid, 1, 2), sample_data)
 
 # Returns a tuple containing a training model and an evaluation model
 def build_model(params):   

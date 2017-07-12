@@ -1,19 +1,25 @@
-from keras.layers import Input, Reshape, Dense, Flatten, Activation, Dropout, Lambda
-from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.normalization import BatchNormalization
-from keras.layers.convolutional import Conv2D
-from keras.models import Sequential, Model
-import keras.regularizers
-import keras.layers
+try:
+    import keras
+    from keras.layers import Input, Reshape, Dense, Flatten, Activation, Dropout, Lambda
+    from keras.layers.advanced_activations import LeakyReLU
+    from keras.layers.normalization import BatchNormalization
+    from keras.layers.convolutional import Conv2D
+    from keras.models import Sequential, Model
+    import keras.regularizers
+    import keras.layers
 
-from keras.optimizers import Adam
-from lapgan import build_lapgan, lapgan_targets_generator
+    from keras.optimizers import Adam
+    from lapgan import build_lapgan
 
-from keras_adversarial import AdversarialModel, AdversarialOptimizerAlternating, normal_latent_sampling
+    from keras_adversarial import AdversarialModel, AdversarialOptimizerAlternating, normal_latent_sampling
+
+except ImportError:
+    print("Disabling Keras functionality...")
 
 import dataio
 
 import os
+import itertools
 
 import numpy as np
 import utils
@@ -28,7 +34,7 @@ def get_config_params(args):
             'output-dir': './output/cifar',
             'initial-epoch': 0,
             'epochs': 200,
-            'steps-per-epoch': 782, #~50000 images (782 * 64)
+            'steps-per-epoch': 2, #~50000 images (782 * 64)
             'validation-steps': 1,
             'batch-size': 64,
             'use-voronoi': False}
@@ -75,18 +81,20 @@ def read_data(params):
     test_images = image_label_parser(test_chunk_generator)
 
     def pyramid_generator(image_label):
+        #translations = list(itertools.product(range(-2, 3), range(-2, 3)))
+        translations = [(0, 0)]; # No translation replication at all...
         if params['use-voronoi']:
             import voronoi
             # x's are the (imgs, labels) tuples
-            layer3 = lambda x: x[0] # just returns the original
-            layer2 = lambda x: utils.blur_downsample(voronoi.vorify_batch(x[0], [2, 2], 2), 2)
-            layer1 = lambda x: utils.blur_downsample(utils.blur_downsample(voronoi.vorify_batch(x[0], [4, 4], 2), 2), 1)
+            layer3 = lambda x: utils.repl_images_trans(x[0], translations, 'edge') # Replicate the images, translated
+            layer2 = lambda x: utils.blur_downsample(voronoi.vorify_batch(layer3(x), [2, 2], 2), 2)
+            layer1 = lambda x: utils.blur_downsample(utils.blur_downsample(voronoi.vorify_batch(layer3(x), [4, 4], 2), 2), 1)
         else:
-            layer3 = lambda x: x[0] # just returns the original
-            layer2 = lambda x: utils.blur_downsample(x[0], 2)
-            layer1 = lambda x: utils.blur_downsample(utils.blur_downsample(x[0], 2), 1)
+            layer3 = lambda x: utils.repl_images_trans(x[0], translations, 'edge') # Replicate the images, translated
+            layer2 = lambda x: utils.blur_downsample(layer3(x), 2)
+            layer1 = lambda x: utils.blur_downsample(layer2(x), 1)
 
-        labels = lambda x: x[1]
+        labels = lambda x: np.tile(x[1], (len(translations), 1))
             
         # Build a pyramid
         return utils.list_simultaneous_ops(image_label, [layer1, layer2, layer3, labels])
@@ -94,8 +102,8 @@ def read_data(params):
     train_pyramid = pyramid_generator(train_images)
     test_pyramid = pyramid_generator(test_images)
     sample_data = next(test_pyramid)
-    return (lapgan_targets_generator(train_pyramid, 1, 2),
-            lapgan_targets_generator(test_pyramid, 1, 2), sample_data)
+    return (utils.lapgan_targets_generator(train_pyramid, 1, 2),
+            utils.lapgan_targets_generator(test_pyramid, 1, 2), sample_data)
 
 # Returns a tuple containing a training model and an evaluation model
 def build_model(params):   

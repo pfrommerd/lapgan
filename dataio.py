@@ -2,11 +2,11 @@ import sys
 import itertools
 import os, sys, tarfile, shutil
 import numpy as np
+import random
 
 import tempfile
 
 import urllib.request
-
 
 # TODO: Finish
 def mmapped_pyramid_cacher(data, pyramid_size,
@@ -18,6 +18,17 @@ def mmapped_pyramid_cacher(data, pyramid_size,
     else:
         # Cache the pyramid
         pass
+
+def chunk_shuffler_generator(chunkGenerator):
+    for chunk in chunkGenerator:
+        random.shuffle(chunk)
+        yield chunk
+
+def list_subchunk_generator(chunkGenerator, chunkSize):
+    for chunk in chunkGenerator:
+        subchunks = [chunk[x:x+chunkSize] for x in range(0, len(chunk), chunkSize)]
+        for c in subchunks:
+            yield c
 
 def array_chunk_generator(array, sliceSize):
     for start,end in zip(range(0,array.shape[0] - sliceSize, sliceSize),
