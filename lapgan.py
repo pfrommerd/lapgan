@@ -33,7 +33,6 @@ def build_lapgan(generators, discriminators, latent_samplers=[], supply_base=Fal
     input_z_list = [] # The noise inputs
     input_g_list = [] # The gaussian pyramid inputs
     outputs_list = [] # The discriminator outputs
-
     if use_class_conditions and num_classes > 0:
         c_input = Input(shape=(num_classes,), name="class_input")
     
@@ -69,10 +68,10 @@ def build_lapgan(generators, discriminators, latent_samplers=[], supply_base=Fal
             yfake = None
             if c_input is not None:
                 yfake = Activation("linear", name=("yfake_%d" % idx))(discriminator(generator([z, c_input])))
+                yreal = Activation("linear", name=("yreal_%d" % idx))(discriminator([real_g, c_input]))
             else:
+                yreal = Activation("linear", name=("yreal_%d" % idx))(discriminator(real_g))
                 yfake = Activation("linear", name=("yfake_%d" % idx))(discriminator(generator(z)))
-            
-            yreal = Activation("linear", name=("yreal_%d" % idx))(discriminator(real_g))
             outputs_list.append(yfake)
             outputs_list.append(yreal)
             
@@ -86,11 +85,12 @@ def build_lapgan(generators, discriminators, latent_samplers=[], supply_base=Fal
 
             yfake = None
             if c_input is not None:
-                yfake = Activation("linear", name=("yfake_%d" % idx))(discriminator(generator([z, real_g_previous, c_input])))
+                yfake = Activation("linear", name=("yfake_%d" % idx))(discriminator([generator([z, real_g_previous, c_input]), c_input]))
+                yreal = Activation("linear", name=("yreal_%d" % idx))(discriminator([real_x, c_input]))
             else:
                 yfake = Activation("linear", name=("yfake_%d" % idx))(discriminator(generator([z, real_g_previous])))
+                yreal = Activation("linear", name=("yreal_%d" % idx))(discriminator(real_x)) 
             
-            yreal = Activation("linear", name=("yreal_%d" % idx))(discriminator(real_x)) # Learn the delta
             outputs_list.append(yfake)
             outputs_list.append(yreal)
 
