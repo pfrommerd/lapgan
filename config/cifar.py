@@ -9,9 +9,8 @@ try:
     import keras.layers
 
     from keras.optimizers import Adam
-    from lapgan import build_gan_layer, normal_latent_sampling
-
     from keras_adversarial import AdversarialModel, AdversarialOptimizerAlternating
+    from lapgan import build_gan_layer, normal_latent_sampling
 
 except ImportError:
     print("Disabling Keras functionality...")
@@ -29,7 +28,16 @@ TRAIN_FILES = ['data_batch_1.bin', 'data_batch_2.bin',
                'data_batch_5.bin']
 TEST_FILES = ['test_batch.bin']
 
-PARAMS = {'data-dir': './data/cifar',
+PARAMS = None
+PARAMS_L1 = {'data-dir': './data/cifar',
+          'output-dir': './output/cifar',
+          'initial-epoch': 0,
+          'epochs': 300,
+          'steps-per-epoch': 391, #~50000 images (782 * 64)
+          'validation-steps': 1,
+          'batch-size': 128,
+          'use-voronoi': False}
+PARAMS_L2 = {'data-dir': './data/cifar',
           'output-dir': './output/cifar',
           'initial-epoch': 0,
           'epochs': 300,
@@ -38,7 +46,9 @@ PARAMS = {'data-dir': './data/cifar',
           'batch-size': 128,
           'use-voronoi': False}
     
-def get_params():
+def setup_params(layer_num):
+    global PARAMS
+    PARAMS = PARAMS_L1
     return PARAMS
 
 # Downloads and processes data to a subdirectory in directory
@@ -132,7 +142,34 @@ def build_model_layer(layer_num):
 
     model = build_gan_layer(gen, disc, noise)
 
-    return (model, gen, disc)
+    adv_model = AdversarialModel(base_model=model, player_params=[gen.trainable_weights, disc.trainable_weights],
+                                    player_names=["generator", "discriminator"])
+
+    adv_model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerAlternating(),
+                                player_optimizers=[Adam(1e-4, decay=1e-4), Adam(1e-4, decay=1e-4)], loss='binary_crossentropy')
+
+    # Now make an image sampler
+    def image_sampler(image_pyramid):
+        base_imgs = image_pyramid[layer_num]
+        gt_imgs = image_pyramid[layer_num+1]
+        class_conditionals = image_pyramid[3]
+        num_gen_images = image_pyramid[0].shape[0]
+        results = gen.predict([zsamples, base_imgs, class_conditionals]) 
+        # results contains the base input, the output after layer 1, output after layer 2
+        images = [ ('input', base_imgs),
+                   ('gt', gt_imgs),
+                   ('gen', results.reshape(num_gen_images, 16 if layer_num == 0 else 32, 16 if layer_num == 0 else 32, 3))]
+        return images
+
+
+    def model_saver(epoch):
+        # save models
+        g1.save(os.path.join(PARAMS['output-dir'], "generator_1.h5"))
+        g2.save(os.path.join(PARAMS['output-dir'], "generator_2.h5"))
+        d1.save(os.path.join(PARAMS['output-dir'], "discriminator_1.h5"))
+        d2.save(os.path.join(PARAMS['output-dir'], "discriminator_2.h5"))
+
+    return (adv_model, image_sampler, model_saver)
 
 def build_batches_layer(layer_num, data):
     # Pretty much here we just format the data

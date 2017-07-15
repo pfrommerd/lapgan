@@ -1,4 +1,4 @@
-from keras.layers import Input, Lambda
+from keras.layers import Input, Lambda, Activation
 from keras.models import Model
 import keras.backend as K
 
@@ -26,8 +26,8 @@ def build_gan_layer(generator, discriminator, z_sampler):
     gfake_output = [generator(gfake_inputs)]
     # Add the discriminator aux inputs
     dfake_inputs = gfake_output + dfake_aux_inputs
-    dfake_outputs = [discriminator(dfake_inputs)] 
-    dreal_outputs = [discriminator(dreal_inputs)]
+    dfake_outputs = [Activation('linear', name='fake')(discriminator(dfake_inputs))] 
+    dreal_outputs = [Activation('linear', name='real')(discriminator(dreal_inputs))]
 
     return Model(inputs=(gfake_aux_inputs + dfake_aux_inputs + dreal_inputs), outputs=(dfake_outputs + dreal_outputs))
 
