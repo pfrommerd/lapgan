@@ -1,4 +1,5 @@
-from keras.layers import Input
+from keras.layers import Input, Lambda
+from keras.models import Model
 import keras.backend as K
 
 # Builds the model for a single layer of a Lapgan
@@ -17,19 +18,26 @@ import keras.backend as K
 def build_gan_layer(generator, discriminator, z_sampler):
     gfake_aux_inputs = replicate_model_inputs(generator.inputs[1:]) 
     dfake_aux_inputs = replicate_model_inputs(discriminator.inputs[1:])
-    dreal_aux_inputs = replicate_model_inputs(discriminator.inputs[1:])
+    dreal_inputs = replicate_model_inputs(discriminator.inputs)
 
-    gfake_inputs = [z_sampler(discriminator.inputs[0])] # Use discriminator input size
-
+    gfake_inputs = [z_sampler(dreal_inputs[0])] # Use discriminator input size
     gfake_inputs.extend(gfake_aux_inputs)
     
-    gfake_output = generator(gfake_inputs)
-    print(gfake_output)
+    gfake_output = [generator(gfake_inputs)]
     # Add the discriminator aux inputs
     dfake_inputs = gfake_output + dfake_aux_inputs
-    outputs = []
+    dfake_outputs = [discriminator(dfake_inputs)] 
+    dreal_outputs = [discriminator(dreal_inputs)]
+
+    return Model(inputs=(gfake_aux_inputs + dfake_aux_inputs + dreal_inputs), outputs=(dfake_outputs + dreal_outputs))
 
 def replicate_model_inputs(inputs):
     # Should return a list of Input() layers with
     # the same dimensions as each input in inputs
-    return [Input(i.shape[1:]) for i in inputs]
+    # There is some weird bug where the shape isn't
+    # properly done for inputs
+    return [Input(i._keras_shape[1:]) for i in inputs]
+
+def normal_latent_sampling(latent_shape):
+    return Lambda(lambda x: K.random_normal((K.shape(x)[0],) + latent_shape),
+                  output_shape=lambda x: ((x[0],) + latent_shape))

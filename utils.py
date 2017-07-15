@@ -1,4 +1,4 @@
-from scipy.ndimage.filters import gaussian_filter
+import scipy.misc
 import numpy as np
 
 def lambda_gen(input, func):
@@ -25,14 +25,11 @@ def repl_images_trans(batch, translations, padMode):
     result = np.concatenate(replicated_images)
     return result
 
-def blur(images, sigma):
-    return gaussian_filter(images, (0, sigma, sigma, 0))
-
-def downsample(images):
-    return images[:,::2,::2,:]
-
-def blur_downsample(images, sigma):
-    return downsample(blur(images,sigma))
+def images_resize(batch, size, interp='bilinear'):
+    result = []
+    for i in batch:
+        result.append(np.expand_dims(scipy.misc.imresize(i, size, interp), 0))
+    return np.concatenate(result)
 
 def list_simultaneous_ops(images, layer_ops):
     for i in images:

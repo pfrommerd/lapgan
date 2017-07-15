@@ -9,9 +9,9 @@ try:
     import keras.layers
 
     from keras.optimizers import Adam
-    from lapgan import build_gan_layer
+    from lapgan import build_gan_layer, normal_latent_sampling
 
-    from keras_adversarial import AdversarialModel, AdversarialOptimizerAlternating, normal_latent_sampling
+    from keras_adversarial import AdversarialModel, AdversarialOptimizerAlternating
 
 except ImportError:
     print("Disabling Keras functionality...")
@@ -38,6 +38,9 @@ PARAMS = {'data-dir': './data/cifar',
           'batch-size': 128,
           'use-voronoi': False}
     
+def get_params():
+    return PARAMS
+
 # Downloads and processes data to a subdirectory in directory
 # returns the training data and testing data pyramids as two lists in a tuple
 def read_data():
@@ -86,12 +89,12 @@ def read_data():
             import voronoi
             # x's are the (imgs, labels) tuples
             layer3 = lambda x: utils.repl_images_trans(x[0], translations, 'edge') # Replicate the images, translated
-            layer2 = lambda x: utils.blur_downsample(voronoi.vorify_batch(layer3(x), [2, 2], 2), 2)
-            layer1 = lambda x: utils.blur_downsample(utils.blur_downsample(voronoi.vorify_batch(layer3(x), [4, 4], 2), 2), 1)
+            layer2 = lambda x: utils.images_resize(voronoi.vorify_batch(layer3(x), (16, 16)))
+            layer1 = lambda x: utils.images_resize(voronoi.vorify_batch(layer3(x), (8, 8)))
         else:
             layer3 = lambda x: utils.repl_images_trans(x[0], translations, 'edge') # Replicate the images, translated
-            layer2 = lambda x: utils.blur_downsample(layer3(x), 2)
-            layer1 = lambda x: utils.blur_downsample(layer2(x), 1)
+            layer2 = lambda x: utils.images_resize(layer3(x), (16, 16))
+            layer1 = lambda x: utils.images_resize(layer3(x), (8, 8))
 
         labels = lambda x: np.tile(x[1], (len(translations), 1))
             
@@ -101,8 +104,12 @@ def read_data():
     train_pyramid = pyramid_generator(train_images)
     test_pyramid = pyramid_generator(test_images)
     sample_data = next(test_pyramid)
+    # Use only 16 samples
+    sample_data[0] = sample_data[0][:16]
+    sample_data[1] = sample_data[1][:16]
+    sample_data[2] = sample_data[2][:16]
+    sample_data[3] = sample_data[3][:16]
     return (train_pyramid, test_pyramid, sample_data)
-            
 
 # Returns a tuple containing a training model and an evaluation model
 def build_model_layer(layer_num):
@@ -126,6 +133,33 @@ def build_model_layer(layer_num):
     model = build_gan_layer(gen, disc, noise)
 
     return (model, gen, disc)
+
+def build_batches_layer(layer_num, data):
+    # Pretty much here we just format the data
+    # as it needs to be fed into the model
+    # ([gen_fake_cond, gen_fake_class, disc_fake_class, disc_real_input, disc_real_class],
+    #       [gen_fake_target..., gen_real_targets..., disc_fake_targets..., disc_real_targets...])
+    def input_formatter(pyramid):
+        for batch in pyramid:
+            class_input = batch[3]
+            cond_image_input = batch[0 if layer_num == 0 else 1]
+            gen_image_target = batch[1 if layer_num == 0 else 2]
+            # Upsize the input to match the generation target
+            cond_image_input = utils.images_resize(cond_image_input, (gen_image_target.shape[1], gen_image_target.shape[2])) 
+
+            diff_real = gen_image_target - cond_image_input # The real output we want our generator to produce
+
+            ones = np.ones((batch[3].shape[0], 1))
+            zeros = np.zeros((batch[3].shape[0], 1))
+
+            gen_fake_target = ones # Generator should maximize the fake-pass rate
+            gen_real_target = zeros # Doesn't really matter as the generator isn't included in the gradient
+            disc_fake_target = zeros # Discriminator wants to keep out the fakes
+            disc_real_target = ones # And include the reals
+            yield ([cond_image_input, class_input, class_input, diff_real, class_input],
+                   [gen_fake_target, gen_real_target, disc_fake_target, disc_real_target])
+
+    return input_formatter(data)
 
 def _make_generator(layer_num, output_shape, num_classes,
                    latent_dim, nplanes=128,
