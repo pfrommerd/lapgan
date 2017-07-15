@@ -1,17 +1,17 @@
 # lapgan
 
 ## Setup
-Install tensorflow, keras, keras_adversarial (https://github.com/bstriner/keras-adversarial, use source, not from pip), matplotlib, pandas, h5py
+Install tensorflow, keras, keras_adversarial (https://github.com/bstriner/keras-adversarial, use source, not from pip), matplotlib, pandas, h5py, pillow
 The code is python3 compatible so all of the above should be install for python3
 
 So, step by step.
 ### Pip
 First, make sure you have pip installed (`sudo apt install python3-pip` on Ubuntu, comes installed with `brew install python3` on OSX)
 
-### Tensorflow, Keras, Matplotlib, Pandas, h5py
+### Tensorflow, Keras, Matplotlib, Pandas, Pillow, h5py
 Install through pip (or from source for Tensorflow for the speed boost)
 ```
-sudo pip3 install tensorflow keras matplotlib pandas h5py
+sudo pip3 install tensorflow keras matplotlib pandas h5py pillow
 ```
 ### Install Keras-adversarial
 ```
