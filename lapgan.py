@@ -1,198 +1,35 @@
-from scipy.ndimage.filters import gaussian_filter
-
-from keras.models import Model
-from keras.layers import Activation, UpSampling2D, Input, Lambda
-import keras.layers
+from keras.layers import Input
 import keras.backend as K
-from keras.layers.merge import _Merge
 
-import utils
+# Builds the model for a single layer of a Lapgan
+# The function assumes that the noise input is the
+# first input to the generator
+# any other inputs to the generator or discriminator
+# get combined, with the generator inputs coming before the discriminator
+# In other words the model takes two models:
+# generator: (z, aux_inputs...) --> (generated content)
+# discriminator: (input content, aux_inputs) --> (probability, aux_outputs)
+# and combines them into:
+#   (gen_aux_inputs, discriminator_aux_inputs_fake,
+#       discriminator_real_content, discriminator_real_aux_input)
+#       -->
+#           (fake_probability, fake_aux_outputs, real_probability, real_aux_outputs)
+def build_gan_layer(generator, discriminator, z_sampler):
+    gfake_aux_inputs = replicate_model_inputs(generator.inputs[1:]) 
+    dfake_aux_inputs = replicate_model_inputs(discriminator.inputs[1:])
+    dreal_aux_inputs = replicate_model_inputs(discriminator.inputs[1:])
 
-import os
+    gfake_inputs = [z_sampler(discriminator.inputs[0])] # Use discriminator input size
 
-import numpy as np
-
-
-# Takes a bunch of generators (z, g -> x_fake (laplacian delta) ) and discriminators (x_n --> y)
-# (where g is the scaled-up previous level in the gaussian pyramid and x are the laplacian differences)
-# and will pair generators and discrimintors for each level in the laplacian/gaussian pyramids
-# so that the resulting model has
-# (z0, z1, ..., zn, real_g0,  real_g1, ..., real_gn, class) -->
-#         (y_fake0, y_real0, y_fake1, y_real1, ..., y_faken, y_realn)
-#
-# real_gn are the images in the gaussian pyramid
-#
-# if latent_sampling is set then the training model will not have the zn terms)
-#
-# the function returns as a second result also the full generator stack
-# (regardless of how latent_sampling is set)
-# with (z0, z1, ..., zn) --> (o_n), or (z0, z1, ..., zn, real_g0) --> (o_n)
-def build_lapgan(generators, discriminators, latent_samplers=[], supply_base=False, base_dimensions=None, use_class_conditions=False, num_classes=0, name="lapgan"):
-
-    c_input = None
-    input_z_list = [] # The noise inputs
-    input_g_list = [] # The gaussian pyramid inputs
-    outputs_list = [] # The discriminator outputs
-    if use_class_conditions and num_classes > 0:
-        c_input = Input(shape=(num_classes,), name="class_input")
+    gfake_inputs.extend(gfake_aux_inputs)
     
-    real_g_previous = None
-    for idx, (generator, discriminator) in enumerate(zip(generators, discriminators)):
-        if idx == 0 and supply_base==True:
-            real_g_previous = Input(shape=base_dimensions)
-            # The previous real_g is the input to the first generator in this case
-            # We need to append that to the base of the input pyramid
-            input_g_list.append(real_g_previous)
+    gfake_output = generator(gfake_inputs)
+    print(gfake_output)
+    # Add the discriminator aux inputs
+    dfake_inputs = gfake_output + dfake_aux_inputs
+    outputs = []
 
-        # Inputs
-        gen_out_shape = generator.output_shape
-        real_g = Input(shape=(gen_out_shape[1],
-                              gen_out_shape[2],
-                              gen_out_shape[3])) # Gaussian pyramid input
-        input_g_list.append(real_g)
-            
-
-        # real_g_previous will be none if we are generating the next real_g at the first (this) layer
-        # in that scenario we will set real_g_next to be the output of this layer down below
-            
-        # Random noise z:
-        z = generator.inputs[0]
-        if len(latent_samplers) > idx:
-            z = latent_samplers[idx](real_g) # Use the input of real_x to determine the batch size
-        else:
-            input_z_list.append(z)
-        
-        if real_g_previous is None: # We need to generate the base laplacian/gaussian
-            # Here there is only a noise input and we get out the real_g
-            # (i.e we are directly generating the smallest resolution, rather than a delta)
-            yfake = None
-            if c_input is not None:
-                yfake = Activation("linear", name=("yfake_%d" % idx))(discriminator(generator([z, c_input])))
-                yreal = Activation("linear", name=("yreal_%d" % idx))(discriminator([real_g, c_input]))
-            else:
-                yreal = Activation("linear", name=("yreal_%d" % idx))(discriminator(real_g))
-                yfake = Activation("linear", name=("yfake_%d" % idx))(discriminator(generator(z)))
-            outputs_list.append(yfake)
-            outputs_list.append(yreal)
-            
-        else: # We are generating a laplacian delta from the previous real_g
-            #forward (either supplied or generated by a previous layer)
-            # Upsample real_g_previous
-            real_g_previous = UpSampling2D(size=(2,2))(real_g_previous)
-
-            # Get the real_x delta between real_g and real_g_previous
-            real_x = _subtract([real_g, real_g_previous])
-
-            yfake = None
-            if c_input is not None:
-                yfake = Activation("linear", name=("yfake_%d" % idx))(discriminator([generator([z, real_g_previous, c_input]), c_input]))
-                yreal = Activation("linear", name=("yreal_%d" % idx))(discriminator([real_x, c_input]))
-            else:
-                yfake = Activation("linear", name=("yfake_%d" % idx))(discriminator(generator([z, real_g_previous])))
-                yreal = Activation("linear", name=("yreal_%d" % idx))(discriminator(real_x)) 
-            
-            outputs_list.append(yfake)
-            outputs_list.append(yreal)
-
-        real_g_previous = real_g
-
-    sandwiched_inputs = input_z_list + input_g_list
-    if c_input is not None:
-        sandwiched_inputs.append(c_input)
-    sandwiched_model = Model(inputs=sandwiched_inputs, outputs=outputs_list, name=name)
-
-    # Now do the same thing, but chain the generators together rather than going back
-    # to always get the ground truth
-    c_input = None    
-    input_z_list = [] # The noise inputs
-    input_g_list = [] # The bottommost gaussian input, if any (will be none if supply_base=False)
-    outputs_list = [] # The generator outputs, at each level in the pyramid
-
-    if use_class_conditions and num_classes > 0:
-        c_input = Input(shape=(num_classes,), name="class_input")
-    
-    # We need to feed the gaussian pyramid
-    # reconstruction from the laplacian into the generator
-    # not the laplacian itself!
-    g_previous = None # The real g before the current layer (None for first iteration if generate_base=True)
-    g_next = None # The real g after the current layer
-    for idx, (generator, discriminator) in enumerate(zip(generators, discriminators)):
-        if g_previous is None and supply_base==True:
-            g_previous = Input(shape=base_dimensions)
-            # The previous real_g is the input to the first generator in this case
-            # We need to append that to the base of the input pyramid
-            input_g_list.append(g_previous)
-
-        # Inputs
-        
-        # g_previous will be none if we are generating the next g at the first (this) layer
-        # in that scenario we will set g_next to be the output of this layer down below
-            
-        # Random noise z:
-        z = generator.inputs[0]
-        input_z_list.append(z) # We will need this regardless of which layer we are on, so add it right away
-
-        if g_previous is None: # We need to generate the base laplacian/gaussian
-            if c_input is not None:
-                fake_g = generator([z, c_input])
-            else:
-                fake_g = generator(z)
-
-            # This is the base generation, forward to the next layer
-            g_next = fake_g
-        else: # We have a previous laplacian/gaussian which we need to forward (either supplied or generated by a previous layer)
-            # Upsample the input as the generator expects to get an upsampled version
-            g_previous = UpSampling2D(size=(2,2))(g_previous)
-            if c_input is not None:
-                fake_x = generator([z, g_previous, c_input])
-            else:
-                fake_x = generator([z, g_previous])
-
-            # Add the delta
-            g_next = keras.layers.add([g_previous, fake_x])
-
-        outputs_list.append(g_next) # Output the reconstruction after this layer
-        
-        g_previous = g_next # Moving to the next layer
-
-    full_inputs = input_z_list + input_g_list
-    if c_input is not None:
-        full_inputs.append(c_input)
-    full_model = Model(full_inputs, outputs_list, name=name)
-
-    return sandwiched_model, full_model
-
-
-   
-def fix_names(outputs, names):
-    if not isinstance(outputs, list):
-        outputs = [outputs]
-    if not isinstance(names, list):
-        names = [names]
-    return [Activation('linear', name=name)(output) for output, name in zip(outputs, names)]
-
-
-
-class _Subtract(_Merge):
-    """Layer that subtracts 2 inputs
-    It takes 2 tensor inputs
-    of the same shape and returns the difference
-    between the first and the second (input1 - input2)
-    """
-
-    def _merge_function(self, inputs):
-        if len(inputs) < 2:
-            raise ValueError('Subtract layer needs at least 2 inputs')
-        output = inputs[0] - inputs[1]
-        return output
-
-
-def _subtract(inputs, **kwargs):
-    """Functional interface to the `Subtract` layer.
-    # Arguments
-        inputs: A list of 2 input tensors
-        **kwargs: Standard layer keyword arguments.
-    # Returns
-        A tensor, the sum of the inputs.
-    """
-    return _Subtract(**kwargs)(inputs)
+def replicate_model_inputs(inputs):
+    # Should return a list of Input() layers with
+    # the same dimensions as each input in inputs
+    return [Input(i.shape[1:]) for i in inputs]
