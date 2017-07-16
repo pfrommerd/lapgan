@@ -159,6 +159,7 @@ def build_model_layer(layer_num):
     def image_sampler(image_pyramid):
         base_imgs = image_pyramid[layer_num]
         gt_imgs = image_pyramid[layer_num+1]
+        base_imgs = utils.images_resize(base_imgs, (gt_imgs[0].shape[1], gt_imgs[0].shape[2])) 
         class_conditionals = image_pyramid[3]
         num_gen_images = image_pyramid[0].shape[0]
         results = gen.predict([zsamples, base_imgs, class_conditionals]) 
