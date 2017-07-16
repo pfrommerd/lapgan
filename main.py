@@ -17,7 +17,7 @@ parser.add_argument('--config', default='config.cifar',
                     help='The name of the config to use')
 args = parser.parse_args()
 
-layer_num = args.layernum
+layer_num = int(args.layernum)
 
 configModule = args.config
 config = importlib.import_module(configModule)

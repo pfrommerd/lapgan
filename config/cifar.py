@@ -132,14 +132,16 @@ def read_data():
 # Returns a tuple containing a training model and an evaluation model
 def build_model_layer(layer_num):
     # First generator 8x8 --> 16x16
-    g1 = _make_generator(0,output_shape=(16,16,3), latent_dim=16*16, num_classes=10,
+    gen = None
+    disc = None
+    if layer_num == 0:
+        gen = _make_generator(0,output_shape=(16,16,3), latent_dim=16*16, num_classes=10,
                          nplanes=64, name="g1")
-    # Second generator 16x16 --> 32x32
-    g2 = _make_generator(1, output_shape=(32,32,3), latent_dim=32*32, num_classes=10,
+        disc = _make_discriminator(0, num_classes=10, input_shape=(16,16,3), nplanes=64, name="d1")
+    else:
+        gen = _make_generator(1, output_shape=(32,32,3), latent_dim=32*32, num_classes=10,
                          nplanes=128, name="g2")
-
-    d1 = _make_discriminator(0, num_classes=10, input_shape=(16,16,3), nplanes=64, name="d1")
-    d2 = _make_discriminator(1, num_classes=10, input_shape=(32,32,3), nplanes=128, name="d2")
+        disc = _make_discriminator(1, num_classes=10, input_shape=(32,32,3), nplanes=128, name="d2")
 
     z1 = normal_latent_sampling((16 * 16,))
     z2 = normal_latent_sampling((32 * 32,))
@@ -149,8 +151,6 @@ def build_model_layer(layer_num):
 
     zsamples = zsamples1 if layer_num==0 else zsamples2
 
-    gen = g1 if layer_num==0 else g2
-    disc = d1 if layer_num==0 else d2
     noise = z1 if layer_num==0 else z2
 
     model = build_gan_layer(gen, disc, noise)
