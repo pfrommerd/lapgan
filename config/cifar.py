@@ -37,6 +37,7 @@ PARAMS_L1 = {'data-dir': './data/cifar',
           'validation-steps': 1,
           'batch-size': 128,
           'use-voronoi': False}
+
 PARAMS_L2 = {'data-dir': './data/cifar',
           'output-dir': './output/cifar',
           'initial-epoch': 0,
@@ -48,7 +49,7 @@ PARAMS_L2 = {'data-dir': './data/cifar',
     
 def setup_params(layer_num):
     global PARAMS
-    PARAMS = PARAMS_L1
+    PARAMS = PARAMS_L1 if layer_num==0 else PARAMS_L2
     return PARAMS
 
 # Downloads and processes data to a subdirectory in directory
@@ -67,7 +68,8 @@ def read_data():
 
     # Images are 32x32x3 bytes, with an extra byte at the start for the label
     batchSize = PARAMS['batch-size']
-    chunkSize = batchSize * (32 * 32 * 3 + 1)
+    entrySize = 32*32*3+1
+    chunkSize = batchSize * entrySize
 
     train_chunk_generator = dataio.files_chunk_generator(train_files, chunkSize)
     test_chunk_generator = dataio.files_chunk_generator(test_files, chunkSize)
@@ -135,6 +137,11 @@ def build_model_layer(layer_num):
 
     z1 = normal_latent_sampling((16 * 16,))
     z2 = normal_latent_sampling((32 * 32,))
+
+    zsamples1 = np.random.normal(size=(PARAMS['batch-size'], 16*16))
+    zsamples2 = np.random.normal(size=(PARAMS['batch-size'], 32*32))
+
+    zsamples = zsamples1 if layer_num==0 else zsamples2
 
     gen = g1 if layer_num==0 else g2
     disc = d1 if layer_num==0 else d2
