@@ -183,10 +183,8 @@ def build_model_layer(layer_num):
 
     def model_saver(epoch):
         # save models
-        g1.save(os.path.join(PARAMS['output-dir'], "generator_1.h5"))
-        g2.save(os.path.join(PARAMS['output-dir'], "generator_2.h5"))
-        d1.save(os.path.join(PARAMS['output-dir'], "discriminator_1.h5"))
-        d2.save(os.path.join(PARAMS['output-dir'], "discriminator_2.h5"))
+        gen.save(os.path.join(PARAMS['output-dir'], "generator.h5"))
+        disc.save(os.path.join(PARAMS['output-dir'], "discriminator.h5"))
 
     return (adv_model, image_sampler, model_saver)
 
