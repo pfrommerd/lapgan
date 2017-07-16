@@ -94,21 +94,27 @@ def read_data():
     train_images = image_label_parser(train_chunk_generator)
     test_images = image_label_parser(test_chunk_generator)
 
+    #translations = list(itertools.product(range(-2, 3), range(-2, 3)))
+    translations = [(0, 0)]; # No translation replication at all...
+    def replicator(image_label_gen):
+        for il in image_label_gen:
+            yield (utils.repl_images_trans(il[0], translations, 'edge'), np.tile(il[1], (len(translations), 1)))
+
+    train_images = replicator(train_images)
+
     def pyramid_generator(image_label):
-        #translations = list(itertools.product(range(-2, 3), range(-2, 3)))
-        translations = [(0, 0)]; # No translation replication at all...
         if PARAMS['use-voronoi']:
             import voronoi
             # x's are the (imgs, labels) tuples
-            layer3 = lambda x: utils.repl_images_trans(x[0], translations, 'edge') # Replicate the images, translated
+            layer3 = lambda x: x[0]
             layer2 = lambda x: utils.images_resize(voronoi.vorify_batch(layer3(x), (16, 16)))
             layer1 = lambda x: utils.images_resize(voronoi.vorify_batch(layer3(x), (8, 8)))
         else:
-            layer3 = lambda x: utils.repl_images_trans(x[0], translations, 'edge') # Replicate the images, translated
-            layer2 = lambda x: utils.images_resize(layer3(x), (16, 16))
-            layer1 = lambda x: utils.images_resize(layer3(x), (8, 8))
+            layer3 = lambda x: x[0]
+            layer2 = lambda x: utils.images_resize(x[0], (16, 16))
+            layer1 = lambda x: utils.images_resize(x[0], (8, 8))
 
-        labels = lambda x: np.tile(x[1], (len(translations), 1))
+        labels = lambda x: x[1]
             
         # Build a pyramid
         return utils.list_simultaneous_ops(image_label, [layer1, layer2, layer3, labels])
@@ -138,8 +144,8 @@ def build_model_layer(layer_num):
     z1 = normal_latent_sampling((16 * 16,))
     z2 = normal_latent_sampling((32 * 32,))
 
-    zsamples1 = np.random.normal(size=(PARAMS['batch-size'], 16*16))
-    zsamples2 = np.random.normal(size=(PARAMS['batch-size'], 32*32))
+    zsamples1 = np.random.normal(size=(16, 16*16))
+    zsamples2 = np.random.normal(size=(16, 32*32))
 
     zsamples = zsamples1 if layer_num==0 else zsamples2
 
@@ -159,16 +165,16 @@ def build_model_layer(layer_num):
     def image_sampler(image_pyramid):
         base_imgs = image_pyramid[layer_num]
         gt_imgs = image_pyramid[layer_num+1]
-        base_imgs = utils.images_resize(base_imgs, (gt_imgs[0].shape[1], gt_imgs[0].shape[2])) 
+        
+        base_imgs = utils.images_resize(base_imgs, (gt_imgs[0].shape[0], gt_imgs[0].shape[1])) 
         class_conditionals = image_pyramid[3]
         num_gen_images = image_pyramid[0].shape[0]
-        results = gen.predict([zsamples, base_imgs, class_conditionals]) 
+        results = gen.predict([zsamples, base_imgs, class_conditionals], batch_size=num_gen_images) 
         # results contains the base input, the output after layer 1, output after layer 2
         images = [ ('input', base_imgs),
                    ('gt', gt_imgs),
                    ('gen', results.reshape(num_gen_images, 16 if layer_num == 0 else 32, 16 if layer_num == 0 else 32, 3))]
         return images
-
 
     def model_saver(epoch):
         # save models
