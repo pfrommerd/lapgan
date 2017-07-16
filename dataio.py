@@ -8,9 +8,13 @@ import tempfile
 
 import urllib.request
 
-# TODO: Finish
-def mmapped_pyramid_cacher(data, pyramid_size,
-                           nmap_cache_files):
+# The chunk cacher will run
+# through the data once, build an in-memory numpy array
+# and save that to a file
+# it will then cycle through the numpy array
+# To randomly index batches into the numpy array, set random_chunks
+# to true
+def mmapped_chunk_cacher(chunk_generator, cache_file):
     # Check if the files exist
     if files_exist(nmap_cache_files):
         return [array_chunk_generator(np.load(file, mmap_mode='r'))
@@ -19,12 +23,16 @@ def mmapped_pyramid_cacher(data, pyramid_size,
         # Cache the pyramid
         pass
 
-def chunk_shuffler_generator(chunkGenerator):
-    for chunk in chunkGenerator:
-        random.shuffle(chunk)
-        yield chunk
-
-def list_subchunk_generator(chunkGenerator, chunkSize):
+def chunk_concat_generator(chunkGenerator, concatLen):
+    chunks = []
+    for c in chunkGenerator:
+        chunks.append(c)
+        if len(chunks) >= concatLen:
+            yield np.array(chunks)
+            chunks = []
+    yield np.array(chunks)
+        
+def subchunk_generator(chunkGenerator, chunkSize):
     for chunk in chunkGenerator:
         subchunks = [chunk[x:x+chunkSize] for x in range(0, len(chunk), chunkSize)]
         for c in subchunks:
@@ -35,8 +43,11 @@ def array_chunk_generator(array, sliceSize):
                          range(sliceSize, array.shape[0], sliceSize)):
         yield array[start:end]
         
-def files_chunk_generator(files, chunkSize):
-    for filename in itertools.cycle(files):
+def files_chunk_generator(files, chunkSize, cycle=True):
+    if cycle:
+        files = itertools.cycle(files)
+
+    for filename in files:
         with open(filename) as fin:
             while True:
                 data = np.fromfile(fin, dtype=np.uint8, count=chunkSize)

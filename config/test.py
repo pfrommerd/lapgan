@@ -12,6 +12,9 @@ try:
     from keras_adversarial import AdversarialModel, AdversarialOptimizerAlternating
     from lapgan import build_gan_layer, normal_latent_sampling
 
+    import tensorflow as tf
+    import keras.backend as K
+
 except ImportError:
     print("Disabling Keras functionality...")
 
@@ -30,7 +33,7 @@ TEST_FILES = ['test_batch.bin']
 
 PARAMS = None
 PARAMS_L1 = {'data-dir': './data/cifar',
-          'output-dir': './output/cifar',
+          'output-dir': './output/test',
           'initial-epoch': 0,
           'epochs': 300,
           'steps-per-epoch': 391, #~50000 images (782 * 64)
@@ -39,7 +42,7 @@ PARAMS_L1 = {'data-dir': './data/cifar',
           'use-voronoi': False}
 
 PARAMS_L2 = {'data-dir': './data/cifar',
-          'output-dir': './output/cifar',
+          'output-dir': './output/test',
           'initial-epoch': 0,
           'epochs': 300,
           'steps-per-epoch': 391, #~50000 images (782 * 64)
@@ -182,11 +185,7 @@ def build_model_layer(layer_num):
         return images
 
     def model_saver(epoch):
-        # save models
-        g1.save(os.path.join(PARAMS['output-dir'], "generator_1.h5"))
-        g2.save(os.path.join(PARAMS['output-dir'], "generator_2.h5"))
-        d1.save(os.path.join(PARAMS['output-dir'], "discriminator_1.h5"))
-        d2.save(os.path.join(PARAMS['output-dir'], "discriminator_2.h5"))
+        pass
 
     return (adv_model, image_sampler, model_saver)
 
@@ -222,29 +221,10 @@ def _make_generator(layer_num, output_shape, num_classes,
                    name="generator", reg=lambda: keras.regularizers.l1_l2(0, 0)):
     # The conditional_input has been upsampled already
     latent_input = Input(name="g%d_latent_input" % layer_num, shape=(latent_dim,))
-    latent_reshaped = Reshape((output_shape[0], output_shape[1], 1),
-                              name="g%d_reshape" % layer_num)(latent_input)
-    
     conditional_input = Input(name="g%d_conditional_input" % layer_num, shape=output_shape)
     class_input = Input(name="g%d_class_input" % layer_num, shape=(num_classes,))
 
-    # Put the class input through a dense layer
-    class_dense = Dense(output_shape[0]*output_shape[1]*1,
-                        kernel_regularizer=reg())(class_input)
-
-    class_reshaped=Reshape((output_shape[0], output_shape[1], 1),
-                           name="g%d_reshape_class" % layer_num)(class_dense)
-    
-    combined = keras.layers.concatenate([latent_reshaped, conditional_input, class_reshaped])
-    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(),
-               name='g%d_c1' % layer_num)(combined)
-    a = Activation('relu')(x)
-    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(),
-               name='g%d_c2' % layer_num)(a)
-    a = Activation('relu')(x)
-    x = Conv2D(3, (5, 5), padding='same', kernel_regularizer=reg(),
-               name='g%d_c4' % layer_num)(a)
-    r = Reshape(output_shape, name="g%d_x" % layer_num)(x)
+    r = Lambda(lambda x: tf.zeros((K.shape(x)[0], output_shape[0], output_shape[1], output_shape[2])))([conditional_input])
 
     model = Model([latent_input, conditional_input, class_input], [r], name=name)
     return model
@@ -255,26 +235,6 @@ def _make_discriminator(layer_num, input_shape, nplanes=128, num_classes=10,
     generated_input = Input(name="d%d_input" % layer_num, shape=input_shape)
     class_input = Input(name="g%d_class_input" % layer_num, shape=(num_classes,))
 
-    # Put the class input through a dense layer
-    class_dense = Dense(input_shape[0]*input_shape[1]*1,
-                        kernel_regularizer=reg())(class_input)
-
-    class_reshaped=Reshape((input_shape[0], input_shape[1], 1),
-                           name="g%d_reshape_class" % layer_num)(class_dense)
-    
-    combined = keras.layers.concatenate([generated_input, class_reshaped])
-    x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(),
-               name='d%d_c1' % layer_num)(combined)
-    a = Activation('relu')(x) 
-    x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(),
-               name='d%d_c2' % layer_num)(a)
-    a = Activation('relu')(x) 
-    
-    flattened = Flatten(name='d%d_flatten' % layer_num)(a)
-    a = Activation('relu')(flattened)
-    dropout = Dropout(0.5)(a)
-    y = Dense(1, kernel_regularizer=reg(), name='d%d_y' % layer_num)(dropout)
-    
-    result = Activation("sigmoid")(y)
+    result = Lambda(lambda x: tf.ones([K.shape(x)[0],1]))([generated_input])
 
     return Model([generated_input, class_input], [result], name=name)
