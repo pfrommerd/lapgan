@@ -42,13 +42,13 @@ PARAMS_L1 = {'data-dir': './data/cifar',
           'use-voronoi': False}
 
 PARAMS_L2 = {'data-dir': './data/cifar',
-          'output-dir': './output/test',
-          'initial-epoch': 0,
-          'epochs': 300,
-          'steps-per-epoch': 391, #~50000 images (782 * 64)
-          'validation-steps': 1,
-          'batch-size': 128,
-          'use-voronoi': False}
+             'output-dir': './output/test',
+             'initial-epoch': 0,
+             'epochs': 300,
+             'steps-per-epoch': 391, #~50000 images (782 * 64)
+             'validation-steps': 1,
+             'batch-size': 128,
+             'use-voronoi': False}
     
 def setup_params(layer_num):
     global PARAMS
@@ -72,10 +72,13 @@ def read_data():
     # Images are 32x32x3 bytes, with an extra byte at the start for the label
     batchSize = PARAMS['batch-size']
     entrySize = 32*32*3+1
-    chunkSize = batchSize * entrySize
 
-    train_chunk_generator = dataio.files_chunk_generator(train_files, chunkSize)
-    test_chunk_generator = dataio.files_chunk_generator(test_files, chunkSize)
+    train_chunk_generator = dataio.files_chunk_generator(train_files, entrySize)
+    test_chunk_generator = dataio.files_chunk_generator(test_files, batchSize)
+
+    # Save/randomize the chunks
+    cached_random = dataio.mmaped_chunk_cacher(train_chunk_generator, PARAMS['data-dir'], True)
+
 
     def image_label_parser(chunks):
         for chunk in chunks:
@@ -93,7 +96,7 @@ def read_data():
 
             imgs = np.transpose(imgs, (0, 2, 3, 1)).astype(np.float32) / 255.0
             yield (imgs, labels)
-    
+
     train_images = image_label_parser(train_chunk_generator)
     test_images = image_label_parser(test_chunk_generator)
 

@@ -8,20 +8,34 @@ import tempfile
 
 import urllib.request
 
+import random
+
 # The chunk cacher will run
 # through the data once, build an in-memory numpy array
 # and save that to a file
 # it will then cycle through the numpy array
 # To randomly index batches into the numpy array, set random_chunks
 # to true
-def mmapped_chunk_cacher(chunk_generator, cache_file):
+def mmapped_chunk_cacher(chunk_generator, cache_file, randomize_readback):
     # Check if the files exist
-    if files_exist(nmap_cache_files):
-        return [array_chunk_generator(np.load(file, mmap_mode='r'))
-                for file in nmap_cache_files]
-    else:
+    if not files_exist(nmap_cache_files):
         # Cache the pyramid
-        pass
+        chunks = []
+        for chunk in chunk_generator:
+            chunks.append(chunk) 
+            yield chunk
+        a = np.array(chunks)
+        np.save(cache_file, a)
+
+    array = np.load(file, mmap_mode='r')
+    while True:
+        for i in range(array.shape[0]):
+            n = i
+            if randomize_readback:
+                # Select random batch
+                n = random.randrage(0, array.shape[0])
+            
+            yield array[n]
 
 def chunk_concat_generator(chunkGenerator, concatLen):
     chunks = []
@@ -80,5 +94,6 @@ def cond_wget_untar(dest_dir, conditional_files, wget_url, moveFiles=()):
 
 def join_files(dir, files):
     return [os.path.join(dir, f) for f in files]
+
 def files_exist(files):
     return all([os.path.isfile(f) for f in files])
