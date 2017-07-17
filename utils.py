@@ -28,7 +28,7 @@ def repl_images_trans(batch, translations, padMode):
 def images_resize(batch, size, interp='bilinear'):
     result = []
     for i in batch:
-        result.append(np.expand_dims(scipy.misc.imresize(i, size, interp), 0))
+        result.append(np.expand_dims(scipy.ndimage.interpolation.zoom(i, size, interp), -1))
     return np.concatenate(result)
 
 def list_simultaneous_ops(images, layer_ops):
