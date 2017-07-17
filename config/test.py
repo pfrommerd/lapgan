@@ -14,7 +14,6 @@ try:
 
     import tensorflow as tf
     import keras.backend as K
-
 except ImportError:
     print("Disabling Keras functionality...")
 
@@ -37,7 +36,7 @@ PARAMS_L1 = {'data-dir': './data/cifar',
           'initial-epoch': 0,
           'epochs': 300,
           'steps-per-epoch': 391, #~50000 images (782 * 64)
-          'validation-steps': 1,
+          'validation-steps': 10,
           'batch-size': 128,
           'use-voronoi': False}
 
@@ -46,7 +45,7 @@ PARAMS_L2 = {'data-dir': './data/cifar',
              'initial-epoch': 0,
              'epochs': 300,
              'steps-per-epoch': 391, #~50000 images (782 * 64)
-             'validation-steps': 1,
+             'validation-steps': 10,
              'batch-size': 128,
              'use-voronoi': False}
     
@@ -73,12 +72,13 @@ def read_data():
     batchSize = PARAMS['batch-size']
     entrySize = 32*32*3+1
 
-    train_chunk_generator = dataio.files_chunk_generator(train_files, entrySize)
-    test_chunk_generator = dataio.files_chunk_generator(test_files, batchSize)
+    train_chunk_generator = dataio.files_chunk_generator(train_files, entrySize, cycle=False)
+    test_chunk_generator = dataio.files_chunk_generator(test_files, batchSize * entrySize)
 
     # Save/randomize the chunks
-    cached_random = dataio.mmaped_chunk_cacher(train_chunk_generator, PARAMS['data-dir'], True)
+    cached_random = dataio.mmapped_chunk_cacher(train_chunk_generator, PARAMS['data-dir'] + '/cifar.npy', True)
 
+    batched = dataio.chunk_concat_generator(cached_random, batchSize)
 
     def image_label_parser(chunks):
         for chunk in chunks:
@@ -91,13 +91,13 @@ def read_data():
             chunk = np.delete(chunk, np.arange(0, chunk.size, 32*32*3+1))
             
             num_images = chunk.size // (32*32*3)
-
+            
             imgs = np.reshape(chunk, (num_images, 3, 32, 32))
-
+            
             imgs = np.transpose(imgs, (0, 2, 3, 1)).astype(np.float32) / 255.0
             yield (imgs, labels)
-
-    train_images = image_label_parser(train_chunk_generator)
+    
+    train_images = image_label_parser(batched)
     test_images = image_label_parser(test_chunk_generator)
 
     #translations = list(itertools.product(range(-2, 3), range(-2, 3)))

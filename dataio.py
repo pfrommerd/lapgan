@@ -18,7 +18,7 @@ import random
 # to true
 def mmapped_chunk_cacher(chunk_generator, cache_file, randomize_readback):
     # Check if the files exist
-    if not files_exist(nmap_cache_files):
+    if not file_exists(cache_file):
         # Cache the pyramid
         chunks = []
         for chunk in chunk_generator:
@@ -27,13 +27,13 @@ def mmapped_chunk_cacher(chunk_generator, cache_file, randomize_readback):
         a = np.array(chunks)
         np.save(cache_file, a)
 
-    array = np.load(file, mmap_mode='r')
+    array = np.load(cache_file, mmap_mode='r')
     while True:
         for i in range(array.shape[0]):
             n = i
             if randomize_readback:
                 # Select random batch
-                n = random.randrage(0, array.shape[0])
+                n = random.randrange(0, array.shape[0])
             
             yield array[n]
 
@@ -42,10 +42,11 @@ def chunk_concat_generator(chunkGenerator, concatLen):
     for c in chunkGenerator:
         chunks.append(c)
         if len(chunks) >= concatLen:
-            yield np.array(chunks)
+            r = np.concatenate(chunks, 0)
+            yield r
             chunks = []
-    yield np.array(chunks)
-        
+    yield np.concatenate(chunks, 0)
+
 def subchunk_generator(chunkGenerator, chunkSize):
     for chunk in chunkGenerator:
         subchunks = [chunk[x:x+chunkSize] for x in range(0, len(chunk), chunkSize)]
@@ -97,3 +98,6 @@ def join_files(dir, files):
 
 def files_exist(files):
     return all([os.path.isfile(f) for f in files])
+
+def file_exists(f):
+    return os.path.isfile(f)
