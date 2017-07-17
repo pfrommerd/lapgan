@@ -170,6 +170,7 @@ def build_model_layer(layer_num):
         class_conditionals = image_pyramid[3]
         num_gen_images = image_pyramid[0].shape[0]
 
+        diff_gt = gt_imgs - base_imgs
         diff_results = gen.predict([zsamples, base_imgs, class_conditionals], batch_size=num_gen_images) 
         diff_reshaped = diff_results.reshape(num_gen_images, base_imgs.shape[0], base_imgs.shape[1], 3)
 
@@ -177,7 +178,9 @@ def build_model_layer(layer_num):
 
         # results contains the base input, the output after layer 1, output after layer 2
         images = [ ('input', base_imgs),
-                   ('gt', gt_imgs),
+                   ('target', gt_imgs),
+                   ('diff_results', 0.5 * (diff_results + 1)),
+                   ('diff_gt', 0.5 * (diff_gt + 1)),
                    ('gen', img_results) ] 
         return images
 

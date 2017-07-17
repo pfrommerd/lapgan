@@ -1,4 +1,4 @@
-import scipy.misc
+import scipy.ndimage.interpolation
 import numpy as np
 
 def lambda_gen(input, func):
@@ -25,12 +25,12 @@ def repl_images_trans(batch, translations, padMode):
     result = np.concatenate(replicated_images)
     return result
 
-def images_resize(batch, size, interp='bilinear'):
-    result = []
-    for i in batch:
-        result.append(np.expand_dims(scipy.misc.imresize(i, size, interp), 0))
-    return np.concatenate(result)
-
+def images_resize(batch, size, order=1):
+    zoom = (1, float(size[0])/batch.shape[1], float(size[1])/batch.shape[2], 1)
+    r = np.zeros((batch.shape[0], size[0], size[1], 3), dtype=np.float32)
+    scipy.ndimage.interpolation.zoom(batch, zoom, r, order=order, mode='nearest')
+    return r
+    
 def list_simultaneous_ops(images, layer_ops):
     for i in images:
         output = []
