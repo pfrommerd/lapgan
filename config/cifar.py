@@ -71,7 +71,7 @@ def read_data():
     entrySize = 32*32*3+1
     chunkSize = batchSize * entrySize
 
-    train_chunk_generator = dataio.files_chunk_generator(train_files, chunkSize, cycle=False)
+    train_chunk_generator = dataio.files_chunk_generator(train_files, entrySize, cycle=False)
     test_chunk_generator = dataio.files_chunk_generator(test_files, chunkSize)
 
     cached_random = dataio.mmapped_chunk_cacher(train_chunk_generator, PARAMS['data-dir'] + '/cifar.npy', True)
@@ -95,7 +95,7 @@ def read_data():
             imgs = np.transpose(imgs, (0, 2, 3, 1)).astype(np.float32) / 255.0
             yield (imgs, labels)
     
-    train_images = image_label_parser(cached_random)
+    train_images = image_label_parser(batched)
     test_images = image_label_parser(test_chunk_generator)
 
     #translations = list(itertools.product(range(-2, 3), range(-2, 3)))
