@@ -8,9 +8,9 @@ try:
     import keras.regularizers
     import keras.layers
 
-    from keras.optimizers import Adam
-    from keras_adversarial import AdversarialModel, AdversarialOptimizerAlternating
-    from lapgan import build_gan_layer, normal_latent_sampling
+    from keras.optimizers import Adam, SGD
+    from keras_adversarial import AdversarialModel
+    from lapgan import build_gan_layer, normal_latent_sampling, AdversarialOptimizerWeighted
 
 except ImportError:
     print("Disabling Keras functionality...")
@@ -33,9 +33,9 @@ PARAMS_L1 = {'data-dir': './data/cifar',
           'output-dir': './output/cifar',
           'initial-epoch': 0,
           'epochs': 300,
-          'steps-per-epoch': 391, #~50000 images (782 * 64)
+          'steps-per-epoch': 195, #~50000 images (782 * 64)
           'validation-steps': 1,
-          'batch-size': 128,
+          'batch-size': 256,
           'use-voronoi': False}
 
 PARAMS_L2 = {'data-dir': './data/cifar',
@@ -158,7 +158,7 @@ def build_model_layer(layer_num):
     adv_model = AdversarialModel(base_model=model, player_params=[gen.trainable_weights, disc.trainable_weights],
                                     player_names=["generator", "discriminator"])
 
-    adv_model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerAlternating(),
+    adv_model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerWeighted([1, 2]),
                                 player_optimizers=[Adam(1e-4, decay=1e-4), Adam(1e-4, decay=1e-4)], loss='binary_crossentropy')
 
     # Now make an image sampler

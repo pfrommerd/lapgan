@@ -41,3 +41,69 @@ def replicate_model_inputs(inputs):
 def normal_latent_sampling(latent_shape):
     return Lambda(lambda x: K.random_normal((K.shape(x)[0],) + latent_shape),
                   output_shape=lambda x: ((x[0],) + latent_shape))
+
+class AdversarialOptimizerWeighted:
+    def __init__(self, weights):
+        self.weights = weights
+
+    def make_train_function(self, inputs, outputs, losses, params, optimizers, constraints, model_updates,
+                            function_kwargs):
+        funcs = []
+        for loss, param, optimizer, constraint in zip(losses, params, optimizers, constraints):
+            updates = optimizer.get_updates(param, constraint, loss)
+            funcs.append(K.function(inputs, [], updates=updates, **function_kwargs))
+        output_func = K.function(inputs, outputs, updates=model_updates, **function_kwargs)
+
+        def train(_inputs):
+            # update each player
+            for func, w in zip(funcs, self.weights):
+                for i in range(w):
+                    func(_inputs)
+                # return output
+                return output_func(_inputs)
+        
+        return train
+
+class AdversarialOptimizerWeighted:
+    def __init__(self, weights):
+        self.weights = weights
+
+    def make_train_function(self, inputs, outputs, losses, params, optimizers, constraints, model_updates,
+                            function_kwargs):
+        funcs = []
+        for loss, param, optimizer, constraint in zip(losses, params, optimizers, constraints):
+            updates = optimizer.get_updates(param, constraint, loss)
+            funcs.append(K.function(inputs, [], updates=updates, **function_kwargs))
+        output_func = K.function(inputs, outputs, updates=model_updates, **function_kwargs)
+
+        def train(_inputs):
+            # update each player
+            for func, w in zip(funcs, self.weights):
+                for i in range(w):
+                    func(_inputs)
+            # return output
+            return output_func(_inputs)
+        
+        return train
+
+# TODO: Implement
+class AdversarialOptimizerHingeTrain:
+    def __init__(self, cutoffs):
+        self.cutoffs = cutoffs
+
+    def make_train_function(self, inputs, outputs, losses, params, optimizers, constraints, model_updates,
+                            function_kwargs):
+        funcs = []
+        for loss, param, optimizer, constraint, cutoff in zip(losses, params, optimizers, constraints):
+            updates = optimizer.get_updates(param, constraint, loss)
+            funcs.append(K.function(inputs, [], updates=updates, **function_kwargs))
+        output_func = K.function(inputs, outputs, updates=model_updates, **function_kwargs)
+
+        def train(_inputs):
+            # update each player
+            for func in zip(funcs):
+                func(_inputs)
+                # return output
+                return output_func(_inputs)
+        
+        return train
