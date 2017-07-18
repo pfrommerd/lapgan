@@ -9,8 +9,8 @@ try:
     import keras.layers
 
     from keras.optimizers import Adam, SGD
-    from keras_adversarial import AdversarialModel
-    from lapgan import build_gan_layer, normal_latent_sampling, AdversarialOptimizerWeighted
+    from keras_adversarial import AdversarialModel, AdversarialOptimizerScheduled
+    from lapgan import build_gan_layer, normal_latent_sampling
 
 except ImportError:
     print("Disabling Keras functionality...")
@@ -33,9 +33,9 @@ PARAMS_L1 = {'data-dir': './data/cifar',
           'output-dir': './output/cifar',
           'initial-epoch': 0,
           'epochs': 300,
-          'steps-per-epoch': 195, #~50000 images (782 * 64)
-          'validation-steps': 1,
-          'batch-size': 256,
+          'steps-per-epoch': 391, #~50000 images (782 * 64)
+          'validation-steps': 20,
+          'batch-size': 128,
           'use-voronoi': False}
 
 PARAMS_L2 = {'data-dir': './data/cifar',
@@ -43,7 +43,7 @@ PARAMS_L2 = {'data-dir': './data/cifar',
           'initial-epoch': 0,
           'epochs': 300,
           'steps-per-epoch': 391, #~50000 images (782 * 64)
-          'validation-steps': 1,
+          'validation-steps': 20,
           'batch-size': 128,
           'use-voronoi': False}
     
@@ -71,8 +71,12 @@ def read_data():
     entrySize = 32*32*3+1
     chunkSize = batchSize * entrySize
 
-    train_chunk_generator = dataio.files_chunk_generator(train_files, chunkSize)
+    train_chunk_generator = dataio.files_chunk_generator(train_files, chunkSize, cycle=False)
     test_chunk_generator = dataio.files_chunk_generator(test_files, chunkSize)
+
+    cached_random = dataio.mmapped_chunk_cacher(train_chunk_generator, PARAMS['data-dir'] + '/cifar.npy', True)
+
+    batched = dataio.chunk_concat_generator(cached_random, batchSize)
 
     def image_label_parser(chunks):
         for chunk in chunks:
@@ -91,7 +95,7 @@ def read_data():
             imgs = np.transpose(imgs, (0, 2, 3, 1)).astype(np.float32) / 255.0
             yield (imgs, labels)
     
-    train_images = image_label_parser(train_chunk_generator)
+    train_images = image_label_parser(cached_random)
     test_images = image_label_parser(test_chunk_generator)
 
     #translations = list(itertools.product(range(-2, 3), range(-2, 3)))
@@ -158,7 +162,7 @@ def build_model_layer(layer_num):
     adv_model = AdversarialModel(base_model=model, player_params=[gen.trainable_weights, disc.trainable_weights],
                                     player_names=["generator", "discriminator"])
 
-    adv_model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerWeighted([1, 2]),
+    adv_model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerScheduled([0, 1, 1, 1]),
                                 player_optimizers=[Adam(1e-4, decay=1e-4), Adam(1e-4, decay=1e-4)], loss='binary_crossentropy')
 
     # Now make an image sampler
@@ -237,13 +241,13 @@ def _make_generator(layer_num, output_shape, num_classes,
                            name="g%d_reshape_class" % layer_num)(class_dense)
     
     combined = keras.layers.concatenate([latent_reshaped, conditional_input, class_reshaped])
-    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(),
+    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(), use_bias=False,
                name='g%d_c1' % layer_num)(combined)
     a = Activation('relu')(x)
-    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(),
+    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(), use_bias=False,
                name='g%d_c2' % layer_num)(a)
     a = Activation('relu')(x)
-    x = Conv2D(3, (5, 5), padding='same', kernel_regularizer=reg(),
+    x = Conv2D(3, (5, 5), padding='same', kernel_regularizer=reg(), use_bias=False,
                name='g%d_c4' % layer_num)(a)
     r = Reshape(output_shape, name="g%d_x" % layer_num)(x)
 
@@ -264,11 +268,14 @@ def _make_discriminator(layer_num, input_shape, nplanes=128, num_classes=10,
                            name="g%d_reshape_class" % layer_num)(class_dense)
     
     combined = keras.layers.concatenate([generated_input, class_reshaped])
-    x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(),
+    x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(), use_bias=False,
                name='d%d_c1' % layer_num)(combined)
     a = Activation('relu')(x) 
-    x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(),
+    x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(), use_bias=False,
                name='d%d_c2' % layer_num)(a)
+    a = Activation('relu')(x) 
+    x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(), use_bias=False,
+               name='d%d_c3' % layer_num)(a)
     a = Activation('relu')(x) 
     
     flattened = Flatten(name='d%d_flatten' % layer_num)(a)

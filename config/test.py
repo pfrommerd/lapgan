@@ -89,7 +89,7 @@ def read_data():
             labels[np.arange(label_indices.shape[0]), label_indices] = 1 # set 1's
             
             chunk = np.delete(chunk, np.arange(0, chunk.size, 32*32*3+1))
-            
+
             num_images = chunk.size // (32*32*3)
             
             imgs = np.reshape(chunk, (num_images, 3, 32, 32))
