@@ -172,7 +172,7 @@ def build_model_layer(layer_num):
 
         diff_gt = gt_imgs - base_imgs
         diff_results = gen.predict([zsamples, base_imgs, class_conditionals], batch_size=num_gen_images) 
-        diff_reshaped = diff_results.reshape(num_gen_images, base_imgs.shape[0], base_imgs.shape[1], 3)
+        diff_reshaped = diff_results.reshape(num_gen_images, base_imgs[0].shape[0], base_imgs[0].shape[1], 3)
 
         img_results = base_imgs + diff_reshaped
 
