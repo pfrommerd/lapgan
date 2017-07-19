@@ -81,7 +81,6 @@ class AdversarialOptimizerHingeTrain(Callback):
         funcs = []
         for loss, param, optimizer, constraint in zip(losses, params, optimizers, constraints):
             include = False
-            for c in 
             if include:
                 updates = optimizer.get_updates(param, constraint, loss)
                 funcs.append(K.function(inputs, [], updates=updates, **function_kwargs))
