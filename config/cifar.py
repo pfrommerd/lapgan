@@ -83,14 +83,18 @@ def build_model(params):
     disc_weights = tf.variable_scope('disc')
 
     # Inputs
-    img_cond = tf.placeholder(tf.float32, shape=[None, params['fine_shape'][0], params['fine_shape'][1], params['fine_shape'][3]])
-    noise = tf.random_normal(tf.shape(img_cond)
-    gen = _make_generator(gen_weights, data_shape=params['fine_shape'], num_classes=params['num_classes'],
+    img_cond = tf.placeholder(tf.float32, shape=[None, params['fine_shape'][0], params['fine_shape'][1], params['fine_shape'][2]])
+
+    class_cond = tf.placeholder(tf.float32, shape=[None, params['num_classes']])
+    noise = tf.random_normal(tf.shape(img_cond)[:-1], stddev=params['noise'])
+
+    gen = _make_generator(gen_weights, noise, img_cond, class_cond, 
+                            data_shape=params['fine_shape'], 
                             nplanes=params['num_planes'])
     #disc = _make_discriminator(disc_weights, data_shape=params['fine_shape'], num_classes=params['num_classes'],
     #                            nplanes=params['num_planes'])
 
-def _make_generator(noise, img_cond, class_cond, weights, data_shape, nplanes=128):
-
+def _make_generator(weights, noise, img_cond, class_cond, data_shape, nplanes=128):
+    pass
 
 

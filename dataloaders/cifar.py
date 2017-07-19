@@ -1,6 +1,8 @@
 import dataio
 import utils
 
+import numpy as np
+
 TRAIN_FILES = ['data_batch_1.bin', 'data_batch_2.bin',
                'data_batch_3.bin', 'data_batch_4.bin',
                'data_batch_5.bin']
@@ -9,7 +11,7 @@ TEST_FILES = ['test_batch.bin']
 # Downloads and processes data to a subdirectory in directory
 # returns the training data and testing data pyramids as two lists in a tuple
 def build_data_pipeline(params):
-    data_directory = params['data-dir']
+    data_directory = params['data_dir']
     
     train_files = dataio.join_files(data_directory, TRAIN_FILES)
     test_files = dataio.join_files(data_directory, TEST_FILES)
@@ -21,14 +23,14 @@ def build_data_pipeline(params):
                                             dataio.join_files(data_directory, TRAIN_FILES + TEST_FILES)))
 
     # Images are 32x32x3 bytes, with an extra byte at the start for the label
-    batchSize = params['batch-size']
+    batchSize = params['batch_size']
     entrySize = 32*32*3+1
     chunkSize = batchSize * entrySize
 
     train_chunk_generator = dataio.files_chunk_generator(train_files, entrySize, cycle=False)
     test_chunk_generator = dataio.files_chunk_generator(test_files, chunkSize)
 
-    cached_random = dataio.mmapped_chunk_cacher(train_chunk_generator, params['data-dir'] + '/cifar.npy', True)
+    cached_random = dataio.mmapped_chunk_cacher(train_chunk_generator, params['data_dir'] + '/cifar.npy', True)
 
     batched = dataio.chunk_concat_generator(cached_random, batchSize)
 
@@ -61,7 +63,7 @@ def build_data_pipeline(params):
     train_images = replicator(train_images)
 
     def pyramid_generator(image_label):
-        if params['use-voronoi']:
+        if params['use_voronoi']:
             import voronoi
             # x's are the (imgs, labels) tuples
             layer3 = lambda x: x[0]

@@ -17,7 +17,7 @@ layer_num = int(args.layernum)
 configModule = args.config
 config = importlib.import_module(configModule)
 
-params = config.setup_params(layer_num)
+params = config.get_params(layer_num)
 
 # Get the data
 print('Reading data...')
