@@ -17,21 +17,39 @@ import keras.backend as K
 #       discriminator_real_content, discriminator_real_aux_input)
 #       -->
 #           (fake_probability, fake_aux_outputs, real_probability, real_aux_outputs)
-def build_gan_layer(generator, discriminator, z_sampler):
-    gfake_aux_inputs = replicate_model_inputs(generator.inputs[1:]) 
-    dfake_aux_inputs = replicate_model_inputs(discriminator.inputs[1:])
+def build_combined_stack(generator, discriminator, z_sampler):
     dreal_inputs = replicate_model_inputs(discriminator.inputs)
 
+    gfake_aux_inputs = replicate_model_inputs(generator.inputs[1:]) 
     gfake_inputs = [z_sampler(dreal_inputs[0])] # Use discriminator input size
     gfake_inputs.extend(gfake_aux_inputs)
-    
     gfake_output = [generator(gfake_inputs)]
-    # Add the discriminator aux inputs
+
+    dfake_aux_inputs = replicate_model_inputs(discriminator.inputs[1:]) 
     dfake_inputs = gfake_output + dfake_aux_inputs
-    dfake_outputs = [Activation('linear', name='fake')(discriminator(dfake_inputs))] 
-    dreal_outputs = [Activation('linear', name='real')(discriminator(dreal_inputs))]
+    dfake_outputs = [Activation('linear', name='yfake')(discriminator(dfake_inputs))] 
+
+    dreal_outputs = [Activation('linear', name='yreal')(discriminator(dreal_inputs))]
 
     return Model(inputs=(gfake_aux_inputs + dfake_aux_inputs + dreal_inputs), outputs=(dfake_outputs + dreal_outputs))
+
+def build_gen_stack(generator, discriminator, z_sampler):
+    gfake_aux_inputs = replicate_model_inputs(generator.inputs[1:]) 
+    gfake_inputs = [z_sampler(gfake_aux_inputs[0])] # Use other inputs size 
+    gfake_inputs.extend(gfake_aux_inputs)
+    gfake_output = [generator(gfake_inputs)]
+
+    dfake_aux_inputs = replicate_model_inputs(discriminator.inputs[1:]) 
+    dfake_inputs = gfake_output + dfake_aux_inputs
+    dfake_outputs = [Activation('linear', name='yfake')(discriminator(dfake_inputs))] 
+    return Model(inputs=(gfake_aux_inputs + dfake_aux_inputs), outputs=dfake_outputs)
+
+def build_disc_stack(discriminator):
+    dreal_inputs = replicate_model_inputs(discriminator.inputs)
+    dreal_outputs = [Activation('linear', name='yreal')(discriminator(dreal_inputs))]
+    return Model(inputs=dreal_inputs, outputs=dreal_outputs)
+
+
 
 def replicate_model_inputs(inputs):
     # Should return a list of Input() layers with
@@ -43,58 +61,6 @@ def replicate_model_inputs(inputs):
 def normal_latent_sampling(latent_shape):
     return Lambda(lambda x: K.random_normal((K.shape(x)[0],) + latent_shape),
                   output_shape=lambda x: ((x[0],) + latent_shape))
-
-class AdversarialOptimizerWeighted:
-    def __init__(self, weights):
-        self.weights = weights
-
-    def make_train_function(self, inputs, outputs, losses, params, optimizers, constraints, model_updates,
-                            function_kwargs):
-        funcs = []
-        for loss, param, optimizer, constraint in zip(losses, params, optimizers, constraints):
-            updates = optimizer.get_updates(param, constraint, loss)
-            funcs.append(K.function(inputs, [], updates=updates, **function_kwargs))
-        output_func = K.function(inputs, outputs, updates=model_updates, **function_kwargs)
-
-        def train(_inputs):
-            # update each player
-            for func, w in zip(funcs, self.weights):
-                for i in range(w):
-                    func(_inputs)
-            # return output
-            return output_func(_inputs)
-        
-        return train
-
-# TODO: Implement
-class AdversarialOptimizerHingeTrain(Callback):
-    def __init__(self, cutoffs): # Cutoffs is a list of tuples with the player index, the loss name, and the cutoff value
-        self.cutoffs = cutoffs
-        self.losses = [0] * len(cutoffs)
-
-    def on_batch_end(self, batch, logs=None):
-        for i, (p, c, v) in enumerate(self.cutoffs):
-            self.losses[i] = logs[c]
-
-    def make_train_function(self, inputs, outputs, losses, params, optimizers, constraints, model_updates,
-                            function_kwargs):
-        funcs = []
-        for loss, param, optimizer, constraint in zip(losses, params, optimizers, constraints):
-            include = False
-            for c in 
-            if include:
-                updates = optimizer.get_updates(param, constraint, loss)
-                funcs.append(K.function(inputs, [], updates=updates, **function_kwargs))
-        output_func = K.function(inputs, outputs, updates=model_updates, **function_kwargs)
-
-        def train(_inputs):
-            # update each player
-            for func in funcs:
-                func(_inputs)
-            # return output
-            return output_func(_inputs)
-        
-        return train
 
 class ModelSaver(Callback):
     def __init__(self, saver):

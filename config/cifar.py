@@ -5,12 +5,12 @@ try:
     from keras.layers.normalization import BatchNormalization
     from keras.layers.convolutional import Conv2D
     from keras.models import Sequential, Model
+    from keras import losses
     import keras.regularizers
     import keras.layers
 
     from keras.optimizers import Adam, SGD
-    from keras_adversarial import AdversarialModel, AdversarialOptimizerScheduled
-    from lapgan import build_gan_layer, normal_latent_sampling
+    from keras_adversarial import AdversarialModel, AdversarialOptimizerSimultaneous
     import lapgan
 
 except ImportError:
@@ -148,8 +148,8 @@ def build_model_layer(layer_num):
                          nplanes=128, name="g2")
         disc = _make_discriminator(1, num_classes=10, input_shape=(32,32,3), nplanes=128, name="d2")
 
-    z1 = normal_latent_sampling((16 * 16,))
-    z2 = normal_latent_sampling((32 * 32,))
+    z1 = lapgan.normal_latent_sampling((16 * 16,))
+    z2 = lapgan.normal_latent_sampling((32 * 32,))
 
     zsamples1 = np.random.normal(size=(16, 16*16))
     zsamples2 = np.random.normal(size=(16, 32*32))
@@ -158,12 +158,17 @@ def build_model_layer(layer_num):
 
     noise = z1 if layer_num==0 else z2
 
-    model = build_gan_layer(gen, disc, noise)
+    model = lapgan.build_combined_stack(gen, disc, noise)
 
-    adv_model = AdversarialModel(base_model=model, player_params=[gen.trainable_weights, disc.trainable_weights],
-                                    player_names=["generator", "discriminator"])
+    adv_model = AdversarialModel(base_model=model,
+                                 player_params=[gen.trainable_weights, disc.trainable_weights],
+                                 player_names=["generator", "discriminator"])
 
-    adv_model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerScheduled([0, 1, 1, 1]),
+    disc_loss = lambda y_true, y_pred: - K.log(y_pred[1]) - K.log(1-y_pred[0])
+    # For the generate we want the heuristic loss
+    gen_loss = lambda y_true, y_pred: - K.log(y_pred[0]) 
+
+    adv_model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerSimultaneous(),
                                 player_optimizers=[Adam(1e-4, decay=1e-4), Adam(1e-4, decay=1e-4)], loss='binary_crossentropy')
 
     # Now make an image sampler
@@ -213,11 +218,11 @@ def build_batches_layer(layer_num, data):
 
             ones = np.ones((batch[3].shape[0], 1))
             zeros = np.zeros((batch[3].shape[0], 1))
-
             gen_fake_target = ones # Generator should maximize the fake-pass rate
             gen_real_target = zeros # Doesn't really matter as the generator isn't included in the gradient
             disc_fake_target = zeros # Discriminator wants to keep out the fakes
-            disc_real_target = ones # And include the reals
+            disc_real_target = 0.9 * ones # And include the reals
+
             yield ([cond_image_input, class_input, class_input, diff_real, class_input],
                    [gen_fake_target, gen_real_target, disc_fake_target, disc_real_target])
 
@@ -242,13 +247,13 @@ def _make_generator(layer_num, output_shape, num_classes,
                            name="g%d_reshape_class" % layer_num)(class_dense)
     
     combined = keras.layers.concatenate([latent_reshaped, conditional_input, class_reshaped])
-    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(), use_bias=False,
+    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(),
                name='g%d_c1' % layer_num)(combined)
     a = Activation('relu')(x)
-    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(), use_bias=False,
+    x = Conv2D(nplanes, (7, 7), padding='same', kernel_regularizer=reg(),
                name='g%d_c2' % layer_num)(a)
     a = Activation('relu')(x)
-    x = Conv2D(3, (5, 5), padding='same', kernel_regularizer=reg(), use_bias=False,
+    x = Conv2D(3, (5, 5), padding='same', kernel_regularizer=reg(),
                name='g%d_c4' % layer_num)(a)
     r = Reshape(output_shape, name="g%d_x" % layer_num)(x)
 
@@ -275,10 +280,7 @@ def _make_discriminator(layer_num, input_shape, nplanes=128, num_classes=10,
     x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(), use_bias=False,
                name='d%d_c2' % layer_num)(a)
     a = Activation('relu')(x) 
-    x = Conv2D(nplanes, (5, 5), padding='same', kernel_regularizer=reg(), use_bias=False,
-               name='d%d_c3' % layer_num)(a)
-    a = Activation('relu')(x) 
-    
+
     flattened = Flatten(name='d%d_flatten' % layer_num)(a)
     a = Activation('relu')(flattened)
     dropout = Dropout(0.5)(a)
