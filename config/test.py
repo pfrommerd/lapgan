@@ -10,7 +10,8 @@ try:
 
     from keras.optimizers import Adam
     from keras_adversarial import AdversarialModel, AdversarialOptimizerAlternating
-    from lapgan import build_gan_layer, normal_latent_sampling
+    from lapgan import build_gan_layer, normal_latent_sampling, AdversarialOptimizerHingeTrain
+    import lapgan
 
     import tensorflow as tf
     import keras.backend as K
@@ -164,7 +165,8 @@ def build_model_layer(layer_num):
     adv_model = AdversarialModel(base_model=model, player_params=[gen.trainable_weights, disc.trainable_weights],
                                     player_names=["generator", "discriminator"])
 
-    adv_model.adversarial_compile(adversarial_optimizer=AdversarialOptimizerAlternating(),
+    adv_opt = AdversarialOptimizerHingeTrain([0.3, 0.3])
+    adv_model.adversarial_compile(adversarial_optimizer=adv_opt,
                                 player_optimizers=[Adam(1e-4, decay=1e-4), Adam(1e-4, decay=1e-4)], loss='binary_crossentropy')
 
     # Now make an image sampler
@@ -190,7 +192,7 @@ def build_model_layer(layer_num):
     def model_saver(epoch):
         pass
 
-    return (adv_model, image_sampler, model_saver)
+    return (adv_model, image_sampler, [adv_opt, lapgan.ModelSaver(model_saver)])
 
 def build_batches_layer(layer_num, data):
     # Pretty much here we just format the data

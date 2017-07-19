@@ -1,5 +1,7 @@
 from keras.layers import Input, Lambda, Activation
 from keras.models import Model
+from keras.callbacks import Callback
+import tensorflow as tf
 import keras.backend as K
 
 # Builds the model for a single layer of a Lapgan
@@ -59,51 +61,82 @@ class AdversarialOptimizerWeighted:
             for func, w in zip(funcs, self.weights):
                 for i in range(w):
                     func(_inputs)
-                # return output
-                return output_func(_inputs)
-        
-        return train
-
-class AdversarialOptimizerWeighted:
-    def __init__(self, weights):
-        self.weights = weights
-
-    def make_train_function(self, inputs, outputs, losses, params, optimizers, constraints, model_updates,
-                            function_kwargs):
-        funcs = []
-        for loss, param, optimizer, constraint in zip(losses, params, optimizers, constraints):
-            updates = optimizer.get_updates(param, constraint, loss)
-            funcs.append(K.function(inputs, [], updates=updates, **function_kwargs))
-        output_func = K.function(inputs, outputs, updates=model_updates, **function_kwargs)
-
-        def train(_inputs):
-            # update each player
-            for func, w in zip(funcs, self.weights):
-                for i in range(w):
-                    func(_inputs)
             # return output
             return output_func(_inputs)
         
         return train
 
 # TODO: Implement
-class AdversarialOptimizerHingeTrain:
-    def __init__(self, cutoffs):
+class AdversarialOptimizerHingeTrain(Callback):
+    def __init__(self, cutoffs): # Cutoffs is a list of tuples with the player index, the loss name, and the cutoff value
         self.cutoffs = cutoffs
+        self.losses = [0] * len(cutoffs)
+
+    def on_batch_end(self, batch, logs=None):
+        for i, (p, c, v) in enumerate(self.cutoffs):
+            self.losses[i] = logs[c]
 
     def make_train_function(self, inputs, outputs, losses, params, optimizers, constraints, model_updates,
                             function_kwargs):
         funcs = []
-        for loss, param, optimizer, constraint, cutoff in zip(losses, params, optimizers, constraints):
-            updates = optimizer.get_updates(param, constraint, loss)
-            funcs.append(K.function(inputs, [], updates=updates, **function_kwargs))
+        for loss, param, optimizer, constraint in zip(losses, params, optimizers, constraints):
+            include = False
+            for c in 
+            if include:
+                updates = optimizer.get_updates(param, constraint, loss)
+                funcs.append(K.function(inputs, [], updates=updates, **function_kwargs))
         output_func = K.function(inputs, outputs, updates=model_updates, **function_kwargs)
 
         def train(_inputs):
             # update each player
-            for func in zip(funcs):
+            for func in funcs:
                 func(_inputs)
-                # return output
-                return output_func(_inputs)
+            # return output
+            return output_func(_inputs)
         
         return train
+
+class ModelSaver(Callback):
+    def __init__(self, saver):
+        self.saver = saver
+        
+    def on_epoch_end(self, epoch, logs=None):
+        self.saver(epoch)
+
+class TensorImageCallback(Callback):
+    def __init__(self,
+                 generator, input_data, tensorboard):
+        self.generator = generator
+        self.tensorboard = tensorboard
+        self.input_data = input_data
+        self.img_inputs = []
+        self.summary = None
+        
+
+    def initialize_summary(self, names, num_images):
+        if self.summary is None:
+            summaries = []
+            for name in names:
+                img_input = tf.placeholder(tf.float32)
+                summary = tf.summary.image(name, img_input, max_outputs=num_images)
+                summaries.append(summary)
+                self.img_inputs.append(img_input)
+
+            # Merge all the summaries
+            self.summary = tf.summary.merge(summaries)
+        
+    def on_epoch_end(self, epoch, logs={}):
+        output = self.generator(self.input_data)
+
+        # Initialize the inputs if they haven't been
+        names, images = zip(*output)
+
+        num_images = images[0].shape[0]
+
+        self.initialize_summary(names, num_images)
+        
+        img_inputs = dict(zip(self.img_inputs, images)) 
+        summary_str = self.tensorboard.sess.run(self.summary,
+                                    feed_dict=img_inputs)
+        self.tensorboard.writer.add_summary(summary_str, epoch)
+        self.tensorboard.writer.flush()

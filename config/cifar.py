@@ -11,6 +11,7 @@ try:
     from keras.optimizers import Adam, SGD
     from keras_adversarial import AdversarialModel, AdversarialOptimizerScheduled
     from lapgan import build_gan_layer, normal_latent_sampling
+    import lapgan
 
 except ImportError:
     print("Disabling Keras functionality...")
@@ -193,7 +194,7 @@ def build_model_layer(layer_num):
         gen.save(os.path.join(PARAMS['output-dir'], "generator.h5"))
         disc.save(os.path.join(PARAMS['output-dir'], "discriminator.h5"))
 
-    return (adv_model, image_sampler, model_saver)
+    return (adv_model, image_sampler, [lapgan.ModelSaver(model_saver)])
 
 def build_batches_layer(layer_num, data):
     # Pretty much here we just format the data
