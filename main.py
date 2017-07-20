@@ -31,8 +31,8 @@ print('Building model...')
     (yfake, yreal, yfake_logits, yreal_logits, gen_out) = config.build_model(params)
 
 # Create the loss functions for yfake, yreal
-disc_loss = tf.reduce_mean(-tf.log(tf.max(0, yreal)) - tf.log(tf.max(0, 1 - yfake)))
-gen_loss = tf.reduce_mean(-tf.log(tf.max(0, yfake)))
+disc_loss = tf.reduce_mean(-tf.log(tf.maximum(0, yreal)) - tf.log(tf.maximum(0, 1 - yfake)))
+gen_loss = tf.reduce_mean(-tf.log(tf.maximum(0, yfake)))
 
 # Make the tensorboard visualizations
 train_gen_loss = tf.summary.scalar('gen_loss', gen_loss)
