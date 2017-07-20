@@ -30,8 +30,8 @@ print('Building model...')
 (gen_weights, disc_weights), (img_cond, class_cond, diff_real, keep_prob), (yfake, yreal, gen_out) = config.build_model(params)
 
 # Create the loss functions for yfake, yreal
-disc_loss = -tf.log(tf.reduce_mean(yreal)) - tf.log(1 - tf.reduce_mean(yfake))
-gen_loss = -tf.log(tf.reduce_mean(yfake))
+disc_loss = tf.reduce_mean(-tf.log(yreal) - tf.log(1 - yfake))
+gen_loss = tf.reduce_mean(-tf.log(yfake))
 
 # Make the tensorboard visualizations
 train_disc_loss = tf.summary.scalar('disc_loss', disc_loss)
@@ -42,7 +42,7 @@ train_summary_op = tf.summary.merge([train_disc_loss, train_gen_loss])
 # And the test summaries
 
 test_disc_loss = tf.summary.scalar('test_disc_loss', disc_loss)
-test_gen_loss = tf.summary.scalar('test_gen_loss', gen_loss)
+test_gen_loss = tf.summary.scalar('test_gen_loss', gen_loss) 
 
 test_gen_diff = tf.summary.image('test_gen_diff', 0.5 * (gen_out + 1), max_outputs=params['sample_img_num'])
 test_gen_img = tf.summary.image('test_gen_img', gen_out + img_cond, max_outputs=params['sample_img_num'])
