@@ -1,5 +1,4 @@
 import dataio
-import utils
 
 import numpy as np
 
@@ -58,7 +57,7 @@ def build_data_pipeline(params):
     translations = [(0, 0)]; # No translation replication at all...
     def replicator(image_label_gen):
         for il in image_label_gen:
-            yield (utils.repl_images_trans(il[0], translations, 'edge'), np.tile(il[1], (len(translations), 1)))
+            yield (dataio.repl_images_trans(il[0], translations, 'edge'), np.tile(il[1], (len(translations), 1)))
 
     train_images = replicator(train_images)
 
@@ -67,17 +66,17 @@ def build_data_pipeline(params):
             import voronoi
             # x's are the (imgs, labels) tuples
             layer3 = lambda x: x[0]
-            layer2 = lambda x: utils.images_resize(voronoi.vorify_batch(layer3(x), (16, 16)))
-            layer1 = lambda x: utils.images_resize(voronoi.vorify_batch(layer3(x), (8, 8)))
+            layer2 = lambda x: dataio.images_resize(voronoi.vorify_batch(layer3(x), (16, 16)))
+            layer1 = lambda x: dataio.images_resize(voronoi.vorify_batch(layer3(x), (8, 8)))
         else:
             layer3 = lambda x: x[0]
-            layer2 = lambda x: utils.images_resize(x[0], (16, 16))
-            layer1 = lambda x: utils.images_resize(x[0], (8, 8))
+            layer2 = lambda x: dataio.images_resize(x[0], (16, 16))
+            layer1 = lambda x: dataio.images_resize(x[0], (8, 8))
 
         labels = lambda x: x[1]
             
         # Build a pyramid
-        return utils.list_simultaneous_ops(image_label, [layer1, layer2, layer3, labels])
+        return dataio.list_simultaneous_ops(image_label, [layer1, layer2, layer3, labels])
 
     train_pyramid = pyramid_generator(train_images)
     test_pyramid = pyramid_generator(test_images)
