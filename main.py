@@ -27,15 +27,16 @@ test_batch = next(config.format_batches(params,test_data)) # We will only use th
 training_batches = config.format_batches(params, training_data)
 
 print('Building model...')
-(gen_weights, disc_weights), (img_cond, class_cond, diff_real, keep_prob), (yfake, yreal, gen_out) = config.build_model(params)
+(gen_weights, disc_weights), (img_cond, class_cond, diff_real, keep_prob), \
+    (yfake, yreal, yfake_logits, yreal_logits, gen_out) = config.build_model(params)
 
 # Create the loss functions for yfake, yreal
 disc_loss = tf.reduce_mean(-tf.log(yreal) - tf.log(1 - yfake))
 gen_loss = tf.reduce_mean(-tf.log(yfake))
 
 # Make the tensorboard visualizations
-train_disc_loss = tf.summary.scalar('disc_loss', disc_loss)
 train_gen_loss = tf.summary.scalar('gen_loss', gen_loss)
+train_disc_loss = tf.summary.scalar('disc_loss', disc_loss)
 
 train_summary_op = tf.summary.merge([train_disc_loss, train_gen_loss])
 
@@ -87,9 +88,10 @@ with tf.Session() as sess:
                 keep_prob: 0.5
             }
             # Update everything
-            train_summary, _, _ = sess.run([train_summary_op, disc_opt, gen_opt], feed_dict=feed_dict)
+            _, _, train_summary = sess.run([disc_opt, gen_opt, train_summary_op], feed_dict=feed_dict)
             # Log to tensorboard
             writer.add_summary(train_summary, epoch * params['steps_per_epoch'] + i)
+            writer.flush()
 
         # now sample the validation losses and images
         test_summary = sess.run(test_summary_op, feed_dict=test_feed_dict)

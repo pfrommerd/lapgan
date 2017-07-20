@@ -73,34 +73,36 @@ def build_model(params):
     gen = None
     disc = None
     # Inputs
-    img_cond = tf.placeholder(tf.float32, shape=[None, params['fine_shape'][0], params['fine_shape'][1], params['fine_shape'][2]])
-    diff_real = tf.placeholder(tf.float32, shape=[None, params['fine_shape'][0], params['fine_shape'][1], params['fine_shape'][2]])
-    class_cond = tf.placeholder(tf.float32, shape=[None, params['num_classes']])
+    img_cond = tf.placeholder(tf.float32, name='img_cond', shape=[None, params['fine_shape'][0], params['fine_shape'][1], params['fine_shape'][2]])
+    diff_real = tf.placeholder(tf.float32, name='diff_real', shape=[None, params['fine_shape'][0], params['fine_shape'][1], params['fine_shape'][2]])
+    class_cond = tf.placeholder(tf.float32, name='class_cond', shape=[None, params['num_classes']])
 
-    keep_prob = tf.placeholder(tf.float32, shape=())
+    keep_prob = tf.placeholder(tf.float32, name='keep_prob', shape=())
 
     noise = tf.random_normal(tf.shape(img_cond)[:-1], stddev=params['noise'])
 
     gen = None
-    with tf.variable_scope('gen') as scope:
+    with tf.variable_scope('generator') as scope:
         gen = _make_generator(noise, img_cond, class_cond, 
                               data_shape=params['fine_shape'], 
                               nplanes=params['num_planes'])
 
-    yfake = None
     yreal = None
+    yreal_logits = None
+    yfake = None
+    yfake_logits = None
     with tf.variable_scope('discriminator') as scope:
-        yfake = _make_discriminator(gen, class_cond, keep_prob,
+        yfake, yfake_logits = _make_discriminator(gen, class_cond, keep_prob,
                     data_shape=params['fine_shape'], nplanes=params['num_planes']) 
         scope.reuse_variables()
-        yreal =  _make_discriminator(diff_real, class_cond, keep_prob,
+        yreal, yreal_logits =  _make_discriminator(diff_real, class_cond, keep_prob,
                     data_shape=params['fine_shape'], nplanes=params['num_planes']) 
 
     # The variable weights
     gen_weights = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='gen')
     disc_weights = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='disc')
     
-    return ((gen_weights, disc_weights), (img_cond, class_cond, diff_real, keep_prob), (yfake, yreal, gen))
+    return ((gen_weights, disc_weights), (img_cond, class_cond, diff_real, keep_prob), (yfake, yreal, yfake_logits, yreal_logits, gen))
 
 def _make_generator(noise, img_cond, class_cond, data_shape, nplanes=128):
     class_weights = tf.get_variable('class_weights', [10, data_shape[0] * data_shape[1]])
@@ -149,6 +151,7 @@ def _make_discriminator(gen_input, class_cond, keep_prob, data_shape, nplanes=12
 
     dense_weights = tf.get_variable('dense_weights', [data_shape[0] * data_shape[1] * nplanes, 1])
     dense_biases = tf.get_variable('dense_bias', [1])
-    y = tf.nn.sigmoid(utils.dense(dense_weights, bias=dense_biases)(dropout))
+    y_logits = utils.dense(dense_weights, bias=dense_biases)(dropout)
+    y = tf.nn.sigmoid(y_logits)
 
-    return y
+    return y, y_logits
