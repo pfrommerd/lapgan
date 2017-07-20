@@ -125,7 +125,7 @@ def _make_generator(noise, img_cond, class_cond, data_shape, nplanes=128):
     g2 = tf.nn.relu(utils.conv2d(g2_weights, bias=g2_bias)(g1))
 
     g3_weights = tf.get_variable('g3_weights', [5, 5, nplanes, data_shape[2]])
-    g3 = tf.nn.relu(utils.conv2d(g3_weights)(g2))
+    g3 = tf.nn.tanh(utils.conv2d(g3_weights)(g2))
 
     return g3
 
