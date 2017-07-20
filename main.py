@@ -87,8 +87,10 @@ with tf.Session() as sess:
                 diff_real: real_diff,
                 keep_prob: 0.5
             }
-            # Update everything
-            _, _, train_summary = sess.run([disc_opt, gen_opt, train_summary_op], feed_dict=feed_dict)
+            disc_opt.run(feed_dict)
+            gen_opt.run(feed_dict)
+
+            train_summary = sess.run(train_summary_op, feed_dict=feed_dict)
             # Log to tensorboard
             writer.add_summary(train_summary, epoch * params['steps_per_epoch'] + i)
             writer.flush()
