@@ -23,11 +23,11 @@ def build_data_pipeline(params):
 
     # Images are 32x32x3 bytes, with an extra byte at the start for the label
     batchSize = params['batch_size']
+    testBatchSize = params['test_batch_size']
     entrySize = 32*32*3+1
-    chunkSize = batchSize * entrySize
 
     train_chunk_generator = dataio.files_chunk_generator(train_files, entrySize, cycle=False)
-    test_chunk_generator = dataio.files_chunk_generator(test_files, chunkSize)
+    test_chunk_generator = dataio.files_chunk_generator(test_files, testBatchSize*entrySize)
 
     cached_random = dataio.mmapped_chunk_cacher(train_chunk_generator, params['data_dir'] + '/cifar.npy', True)
 
@@ -80,11 +80,5 @@ def build_data_pipeline(params):
 
     train_pyramid = pyramid_generator(train_images)
     test_pyramid = pyramid_generator(test_images)
-    sample_data = next(test_pyramid)
-    # Use only 16 samples
-    sample_data[0] = sample_data[0][:16]
-    sample_data[1] = sample_data[1][:16]
-    sample_data[2] = sample_data[2][:16]
-    sample_data[3] = sample_data[3][:16]
-    return (train_pyramid, test_pyramid, sample_data)
+    return (train_pyramid, test_pyramid)
 

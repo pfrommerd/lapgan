@@ -21,6 +21,8 @@ PARAMS_L1 = {'layer_num': 0,
           'steps_per_epoch': 391, #~50000 images (782 * 64)
           'validation_steps': 20,
           'batch_size': 128,
+          'test_batch_size': 128,
+          'sample_img_num': 16,
           'use_voronoi': False}
 
 PARAMS_L2 = {'layer_num': 1,
@@ -37,6 +39,8 @@ PARAMS_L2 = {'layer_num': 1,
           'steps_per_epoch': 391, #~50000 images (782 * 64)
           'validation_steps': 20,
           'batch_size': 128,
+          'test_batch_size': 128,
+          'sample_img_num': 16,
           'use_voronoi': False}
     
 def get_params(layer_num):
@@ -77,6 +81,7 @@ def build_model(params):
 
     noise = tf.random_normal(tf.shape(img_cond)[:-1], stddev=params['noise'])
 
+    gen = None
     with tf.variable_scope('gen') as scope:
         gen = _make_generator(noise, img_cond, class_cond, 
                               data_shape=params['fine_shape'], 
@@ -95,7 +100,7 @@ def build_model(params):
     gen_weights = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='gen')
     disc_weights = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='disc')
     
-    return ((gen_weights, disc_weights), (img_cond, class_cond, diff_real, keep_prob), (yfake, yreal))
+    return ((gen_weights, disc_weights), (img_cond, class_cond, diff_real, keep_prob), (yfake, yreal, gen))
 
 def _make_generator(noise, img_cond, class_cond, data_shape, nplanes=128):
     class_weights = tf.get_variable('class_weights', [10, data_shape[0] * data_shape[1]])
