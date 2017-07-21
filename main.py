@@ -43,11 +43,6 @@ gen_loss = tf.reduce_mean(logits_sigmoid(yfake_logits, 1))
 disc_loss = tf.reduce_mean(logits_sigmoid(yreal_logits, 1) + logits_sigmoid(yfake_logits, 0))
 
 # Make the tensorboard visualizations
-train_gen_loss = tf.summary.scalar('gen_loss', gen_loss)
-train_disc_loss = tf.summary.scalar('disc_loss', disc_loss)
-
-train_summary_op = tf.summary.merge([train_disc_loss, train_gen_loss])
-
 # And the test summaries
 
 test_disc_loss = tf.summary.scalar('test_disc_loss', disc_loss)
@@ -56,7 +51,14 @@ test_gen_loss = tf.summary.scalar('test_gen_loss', gen_loss)
 test_gen_diff = tf.summary.image('test_gen_diff', 0.5 * (gen_out + 1), max_outputs=params['sample_img_num'])
 test_gen_img = tf.summary.image('test_gen_img', gen_out + img_cond, max_outputs=params['sample_img_num'])
 
-test_summary_op = tf.summary.merge([test_disc_loss, test_gen_loss, test_gen_diff, test_gen_img])
+test_summary_op = tf.summary.merge_all()
+
+# Train summaries
+
+train_gen_loss = tf.summary.scalar('gen_loss', gen_loss)
+train_disc_loss = tf.summary.scalar('disc_loss', disc_loss)
+
+train_summary_op = tf.summary.merge([train_disc_loss, train_gen_loss])
 
 gt_gen_diff = tf.summary.image('gt_gen_diff', 0.5 * (diff_real + 1), max_outputs=params['sample_img_num'])
 gt_gen_input = tf.summary.image('gt_gen_img', img_cond + diff_real, max_outputs=params['sample_img_num'])
@@ -66,8 +68,8 @@ gt_summary_op = tf.summary.merge([gt_gen_diff, gt_gen_input])
 writer = tf.summary.FileWriter(os.path.join(params['output_dir'], 'logs'), graph=tf.get_default_graph())
 
 # Create the optimizers
-disc_opt = tf.train.AdamOptimizer(1e-4).minimize(disc_loss, var_list=disc_weights)
-gen_opt = tf.train.AdamOptimizer(1e-4).minimize(gen_loss, var_list=gen_weights)
+disc_opt = tf.train.AdamOptimizer(1e-5).minimize(disc_loss, var_list=disc_weights)
+gen_opt = tf.train.AdamOptimizer(1e-5).minimize(gen_loss, var_list=gen_weights)
 
 print('Training...')
 with tf.Session() as sess:

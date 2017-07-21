@@ -106,9 +106,11 @@ def build_model(params):
 
 def _make_generator(noise, img_cond, class_cond, data_shape, nplanes=128):
     class_weights = tf.get_variable('class_weights', [10, data_shape[0] * data_shape[1]])
+    tf.summary.image('gen_class_weights', tf.reshape(class_weights, [10, data_shape[0], data_shape[1]]))
+
     # We don't actually need a bias here as we are learning a bitplane per class anyways
     class_vec = utils.dense(class_weights)(class_cond)
-    class_plane = tf.reshape(class_vec, [-1, data_shape[0], data_shape[1], 1])
+    class_plane = tf.nn.relu(tf.reshape(class_vec, [-1, data_shape[0], data_shape[1], 1]))
 
     # Reshape the noise
     noise_plane = tf.reshape(noise, [-1, data_shape[0], data_shape[1], 1])
@@ -131,9 +133,11 @@ def _make_generator(noise, img_cond, class_cond, data_shape, nplanes=128):
 
 def _make_discriminator(gen_input, class_cond, keep_prob, data_shape, nplanes=128):
     class_weights = tf.get_variable('class_weights', [10, data_shape[0] * data_shape[1]])
+    tf.summary.image('disc_class_weights', tf.reshape(class_weights, [10, data_shape[0], data_shape[1]]))
+
     # We don't actually need a bias here as we are learning a bitplane per class anyways
     class_vec = utils.dense(class_weights)(class_cond)
-    class_plane = tf.reshape(class_vec, [-1, data_shape[0], data_shape[1], 1])
+    class_plane = tf.nn.relu(tf.reshape(class_vec, [-1, data_shape[0], data_shape[1], 1]))
 
     # Now concatenate the tensors
     stacked_input = tf.concat([gen_input, class_plane], axis=3)
