@@ -27,7 +27,7 @@ test_batch = next(config.format_batches(params,test_data)) # We will only use th
 training_batches = config.format_batches(params, training_data)
 
 print('Building model...')
-(gen_weights, disc_weights), (img_cond, class_cond, diff_real, keep_prob), \
+(gen_weights, disc_weights, test_summaries, train_summaries), (img_cond, class_cond, diff_real, keep_prob), \
     (yfake, yreal, yfake_logits, yreal_logits, gen_out) = config.build_model(params)
 
 # Create the loss functions for yfake, yreal
@@ -35,12 +35,16 @@ print('Building model...')
 # gen_loss = tf.reduce_mean(-tf.log(tf.maximum(0.0, yfake)))
 def logits_sigmoid(y, z):
     if z:
-        return tf.maximum(y, 0.0) - yfake + tf.log(1+ tf.exp(-tf.abs(y)))
+        return tf.maximum(y, 0.0) - y + tf.log(1+ tf.exp(-tf.abs(y)))
     else:
         return tf.maximum(y, 0.0) + tf.log(1+ tf.exp(-tf.abs(y)))
 
-gen_loss = tf.reduce_mean(logits_sigmoid(yfake_logits, 1))
-disc_loss = tf.reduce_mean(logits_sigmoid(yreal_logits, 1) + logits_sigmoid(yfake_logits, 0))
+gen_loss = None
+disc_loss = None
+with tf.name_space('logits_sigmoid_loss_gen'):
+    gen_loss = tf.reduce_mean(logits_sigmoid(yfake_logits, 1))
+with tf.name_space('logits_sigmoid_loss_disc'):
+    disc_loss = tf.reduce_mean(logits_sigmoid(yreal_logits, 1) + logits_sigmoid(yfake_logits, 0))
 
 # Make the tensorboard visualizations
 # And the test summaries
@@ -48,19 +52,22 @@ disc_loss = tf.reduce_mean(logits_sigmoid(yreal_logits, 1) + logits_sigmoid(yfak
 test_disc_loss = tf.summary.scalar('test_disc_loss', disc_loss)
 test_gen_loss = tf.summary.scalar('test_gen_loss', gen_loss) 
 
-test_gen_diff = tf.summary.image('test_gen_diff', 0.5 * (gen_out + 1), max_outputs=params['sample_img_num'])
+test_gen_diff = tf.summary.image('test_gen_diff', gen_out, max_outputs=params['sample_img_num'])
 test_gen_img = tf.summary.image('test_gen_img', gen_out + img_cond, max_outputs=params['sample_img_num'])
 
-test_summary_op = tf.summary.merge_all()
+test_summary_op = tf.summary.merge([test_disc_loss, test_gen_loss, test_gen_diff, test_gen_img] + test_summaries)
 
 # Train summaries
 
 train_gen_loss = tf.summary.scalar('gen_loss', gen_loss)
 train_disc_loss = tf.summary.scalar('disc_loss', disc_loss)
 
-train_summary_op = tf.summary.merge([train_disc_loss, train_gen_loss])
+train_yreal = tf.summary.scalar('yreal', tf.reduce_mean(yreal))
+train_yfake = tf.summary.scalar('yfake', tf.reduce_mean(yfake))
 
-gt_gen_diff = tf.summary.image('gt_gen_diff', 0.5 * (diff_real + 1), max_outputs=params['sample_img_num'])
+train_summary_op = tf.summary.merge([train_disc_loss, train_gen_loss, train_yreal, train_yfake] + train_summaries)
+
+gt_gen_diff = tf.summary.image('gt_gen_diff', diff_real, max_outputs=params['sample_img_num'])
 gt_gen_input = tf.summary.image('gt_gen_img', img_cond + diff_real, max_outputs=params['sample_img_num'])
 
 gt_summary_op = tf.summary.merge([gt_gen_diff, gt_gen_input])

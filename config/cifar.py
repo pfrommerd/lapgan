@@ -70,6 +70,9 @@ def format_batches(params, data):
 
 def build_model(params):
     # First generator 8x8 --> 16x16
+    test_summaries = []
+    train_summaries = []
+    
     gen = None
     disc = None
     # Inputs
@@ -83,30 +86,35 @@ def build_model(params):
 
     gen = None
     with tf.variable_scope('generator') as scope:
-        gen = _make_generator(noise, img_cond, class_cond, 
+        gen = _make_generator(test_summaries, train_summaries,
+                              noise, img_cond, class_cond, 
                               data_shape=params['fine_shape'], 
                               nplanes=params['num_planes'])
+
 
     yreal = None
     yreal_logits = None
     yfake = None
     yfake_logits = None
     with tf.variable_scope('discriminator') as scope:
-        yfake, yfake_logits = _make_discriminator(gen, class_cond, keep_prob,
+        yfake, yfake_logits = _make_discriminator(test_summaries, train_summaries,
+                                                  gen, class_cond, keep_prob,
                     data_shape=params['fine_shape'], nplanes=params['num_planes']) 
         scope.reuse_variables()
-        yreal, yreal_logits =  _make_discriminator(diff_real, class_cond, keep_prob,
+        yreal, yreal_logits =  _make_discriminator(test_summaries, train_summaries,
+                                                   diff_real, class_cond, keep_prob,
                     data_shape=params['fine_shape'], nplanes=params['num_planes']) 
 
     # The variable weights
     gen_weights = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='gen')
     disc_weights = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='disc')
     
-    return ((gen_weights, disc_weights), (img_cond, class_cond, diff_real, keep_prob), (yfake, yreal, yfake_logits, yreal_logits, gen))
+    return ((gen_weights, disc_weights, test_summaries, train_summaries),
+            (img_cond, class_cond, diff_real, keep_prob), (yfake, yreal, yfake_logits, yreal_logits, gen))
 
-def _make_generator(noise, img_cond, class_cond, data_shape, nplanes=128):
+def _make_generator(test_summaries, train_summaries, noise, img_cond, class_cond, data_shape, nplanes=128):
     class_weights = tf.get_variable('class_weights', [10, data_shape[0] * data_shape[1]])
-    tf.summary.image('gen_class_weights', tf.reshape(class_weights, [10, data_shape[0], data_shape[1]]))
+    test_summaries.append(tf.summary.image('gen_class_weights', tf.reshape(class_weights, [10, data_shape[0], data_shape[1], 1]), max_outputs=10))
 
     # We don't actually need a bias here as we are learning a bitplane per class anyways
     class_vec = utils.dense(class_weights)(class_cond)
@@ -131,9 +139,9 @@ def _make_generator(noise, img_cond, class_cond, data_shape, nplanes=128):
 
     return g3
 
-def _make_discriminator(gen_input, class_cond, keep_prob, data_shape, nplanes=128):
+def _make_discriminator(test_summaries, train_summaries, gen_input, class_cond, keep_prob, data_shape, nplanes=128):
     class_weights = tf.get_variable('class_weights', [10, data_shape[0] * data_shape[1]])
-    tf.summary.image('disc_class_weights', tf.reshape(class_weights, [10, data_shape[0], data_shape[1]]))
+    test_summaries.append(tf.summary.image('disc_class_weights', tf.reshape(class_weights, [10, data_shape[0], data_shape[1], 1]), max_outputs=10))
 
     # We don't actually need a bias here as we are learning a bitplane per class anyways
     class_vec = utils.dense(class_weights)(class_cond)
