@@ -41,9 +41,9 @@ def logits_sigmoid(y, z):
 
 gen_loss = None
 disc_loss = None
-with tf.name_space('logits_sigmoid_loss_gen'):
+with tf.name_scope('logits_sigmoid_loss_gen'):
     gen_loss = tf.reduce_mean(logits_sigmoid(yfake_logits, 1))
-with tf.name_space('logits_sigmoid_loss_disc'):
+with tf.name_scope('logits_sigmoid_loss_disc'):
     disc_loss = tf.reduce_mean(logits_sigmoid(yreal_logits, 1) + logits_sigmoid(yfake_logits, 0))
 
 # Make the tensorboard visualizations
