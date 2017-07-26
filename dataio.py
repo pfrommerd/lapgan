@@ -21,6 +21,18 @@ def repl_data(input, num_tee):
             yield i
 
 # Some utils for replicating data
+def repl_images_trans_gen(batch, translations, padMode):
+    for translation in translations:
+        # Take the subcrop of the images
+        startX = max(-translation[0], 0)
+        startY = max(-translation[1], 0)
+        endX = min(batch.shape[2] - translation[0], batch.shape[2])
+        endY = min(batch.shape[1] - translation[1], batch.shape[1])
+        crop = batch[:,startX:endX, startY:endY,:]
+        paddings = [(0, 0), (batch.shape[2] - endX, startX), (batch.shape[1] - endY, startY), (0,0)]
+        yield np.pad(crop, paddings, padMode)
+
+# Some utils for replicating data
 def repl_images_trans(batch, translations, padMode):
     replicated_images = []
     for translation in translations:
@@ -75,15 +87,24 @@ def mmapped_chunk_cacher(chunk_generator, cache_file, randomize_readback):
             
             yield array[n]
 
-def chunk_concat_generator(chunkGenerator, concatLen):
+# The generators are if the input chunks are something other than numpy arrays (e.g batch tuples)
+def chunk_concat_generator(chunkGenerator, dimLen, calcConcat=lambda x: np.concatenate(x, 0),
+                           calcLen=lambda x: x.shape[0], calcSlice=lambda x,s,e: x[s:e]):
     chunks = []
+    length = 0
     for c in chunkGenerator:
         chunks.append(c)
-        if len(chunks) >= concatLen:
-            r = np.concatenate(chunks, 0)
-            yield r
-            chunks = []
-    yield np.concatenate(chunks, 0)
+        length += calcLen(c)
+        while length >= dimLen:
+            r = calcConcat(chunks)
+            if length > dimLen:
+                chunks = calcSlice(r,-(length - dimLen), None)
+                length = length - dimLen
+            else: # Fits perfectly!
+                chunks = []
+                length = 0
+            yield calcSlice(r,None, dimLen)
+    yield calcConcat(chunks)
 
 def subchunk_generator(chunkGenerator, chunkSize):
     for chunk in chunkGenerator:

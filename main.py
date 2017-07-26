@@ -75,7 +75,7 @@ gt_summary_op = tf.summary.merge([gt_gen_diff, gt_gen_input])
 writer = tf.summary.FileWriter(os.path.join(params['output_dir'], 'logs'), graph=tf.get_default_graph())
 
 # Create the optimizers
-disc_opt = tf.train.AdamOptimizer(1e-5).minimize(disc_loss, var_list=disc_weights)
+disc_opt = tf.train.AdamOptimizer(5e-5).minimize(disc_loss, var_list=disc_weights)
 gen_opt = tf.train.AdamOptimizer(1e-5).minimize(gen_loss, var_list=gen_weights)
 
 print('Training...')

@@ -1,6 +1,7 @@
 import dataio
 
 import numpy as np
+import itertools
 
 TRAIN_FILES = ['data_batch_1.bin', 'data_batch_2.bin',
                'data_batch_3.bin', 'data_batch_4.bin',
@@ -30,8 +31,7 @@ def build_data_pipeline(params):
     test_chunk_generator = dataio.files_chunk_generator(test_files, testBatchSize*entrySize)
 
     cached_random = dataio.mmapped_chunk_cacher(train_chunk_generator, params['data_dir'] + '/cifar.npy', True)
-
-    batched = dataio.chunk_concat_generator(cached_random, batchSize)
+    batched = dataio.chunk_concat_generator(cached_random, batchSize * entrySize)
 
     def image_label_parser(chunks):
         for chunk in chunks:
@@ -53,13 +53,19 @@ def build_data_pipeline(params):
     train_images = image_label_parser(batched)
     test_images = image_label_parser(test_chunk_generator)
 
-    #translations = list(itertools.product(range(-2, 3), range(-2, 3)))
-    translations = [(0, 0)]; # No translation replication at all...
+
+    translations = list(itertools.product([-2, -1, 1, 2], [-2, -1, 1, 2]))
+    #translations = [(0, 0)]; # No translation replication at all...
     def replicator(image_label_gen):
         for il in image_label_gen:
-            yield (dataio.repl_images_trans(il[0], translations, 'edge'), np.tile(il[1], (len(translations), 1)))
-
-    train_images = replicator(train_images)
+            for img in dataio.repl_images_trans_gen(il[0], translations, 'edge'):
+                yield (img, il[1])
+    replicated = replicator(train_images)
+    # Split into batches again
+    train_images = dataio.chunk_concat_generator(replicated, batchSize,
+                    lambda x: (np.concatenate([e[0] for e in x], 0), np.concatenate([e[1] for e in x], 0)),
+                    lambda x: x[0].shape[0],
+                    lambda x,s,e: (x[0][s:e], x[1][s:e]))
 
     def pyramid_generator(image_label):
         if params['use_voronoi']:

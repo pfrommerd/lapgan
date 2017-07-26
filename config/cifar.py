@@ -18,7 +18,7 @@ PARAMS_L1 = {'layer_num': 0,
           'noise': 1, # std deviations of noise
           'initial_epoch': 0,
           'epochs': 300,
-          'steps_per_epoch': 391, #~50000 images (782 * 64)
+          'steps_per_epoch': 391 * 1, #~50000 images (782 * 64)
           'validation_steps': 20,
           'batch_size': 128,
           'test_batch_size': 128,
