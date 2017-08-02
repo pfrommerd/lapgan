@@ -54,7 +54,7 @@ def build_data_pipeline(params):
     test_images = image_label_parser(test_chunk_generator)
 
 
-    translations = list(itertools.product([-2, -1, 1, 2], [-2, -1, 1, 2]))
+    translations = list(itertools.product([-2, -1, 0, 1, 2], [-2, -1, 0, 1, 2]))
     #translations = [(0, 0)]; # No translation replication at all...
     def replicator(image_label_gen):
         for il in image_label_gen:

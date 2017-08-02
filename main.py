@@ -27,93 +27,32 @@ test_batch = next(config.format_batches(params,test_data)) # We will only use th
 training_batches = config.format_batches(params, training_data)
 
 print('Building model...')
-(gen_weights, disc_weights, test_summaries, train_summaries), (img_cond, class_cond, diff_real, keep_prob), \
-    (yfake, yreal, yfake_logits, yreal_logits, gen_out) = config.build_model(params)
-
-# Create the loss functions for yfake, yreal
-# disc_loss = tf.reduce_mean(-tf.log(tf.maximum(0.0, yreal)) - tf.log(tf.maximum(0.0, 1 - yfake)))
-# gen_loss = tf.reduce_mean(-tf.log(tf.maximum(0.0, yfake)))
-def logits_sigmoid(y, z):
-    if z:
-        return tf.maximum(y, 0.0) - y + tf.log(1+ tf.exp(-tf.abs(y)))
-    else:
-        return tf.maximum(y, 0.0) + tf.log(1+ tf.exp(-tf.abs(y)))
-
-gen_loss = None
-disc_loss = None
-with tf.name_scope('logits_sigmoid_loss_gen'):
-    gen_loss = tf.reduce_mean(logits_sigmoid(yfake_logits, 1))
-with tf.name_scope('logits_sigmoid_loss_disc'):
-    disc_loss = tf.reduce_mean(logits_sigmoid(yreal_logits, 1) + logits_sigmoid(yfake_logits, 0))
-
-# Make the tensorboard visualizations
-# And the test summaries
-
-test_disc_loss = tf.summary.scalar('test_disc_loss', disc_loss)
-test_gen_loss = tf.summary.scalar('test_gen_loss', gen_loss) 
-
-test_gen_diff = tf.summary.image('test_gen_diff', gen_out, max_outputs=params['sample_img_num'])
-test_gen_img = tf.summary.image('test_gen_img', gen_out + img_cond, max_outputs=params['sample_img_num'])
-
-test_summary_op = tf.summary.merge([test_disc_loss, test_gen_loss, test_gen_diff, test_gen_img] + test_summaries)
-
-# Train summaries
-
-train_gen_loss = tf.summary.scalar('gen_loss', gen_loss)
-train_disc_loss = tf.summary.scalar('disc_loss', disc_loss)
-
-train_yreal = tf.summary.scalar('yreal', tf.reduce_mean(yreal))
-train_yfake = tf.summary.scalar('yfake', tf.reduce_mean(yfake))
-
-train_summary_op = tf.summary.merge([train_disc_loss, train_gen_loss, train_yreal, train_yfake] + train_summaries)
-
-gt_gen_diff = tf.summary.image('gt_gen_diff', diff_real, max_outputs=params['sample_img_num'])
-gt_gen_input = tf.summary.image('gt_gen_img', img_cond + diff_real, max_outputs=params['sample_img_num'])
-
-gt_summary_op = tf.summary.merge([gt_gen_diff, gt_gen_input])
+train, test = config.build_model(params)
 
 writer = tf.summary.FileWriter(os.path.join(params['output_dir'], 'logs'), graph=tf.get_default_graph())
-
-# Create the optimizers
-disc_opt = tf.train.AdamOptimizer(5e-5).minimize(disc_loss, var_list=disc_weights)
-gen_opt = tf.train.AdamOptimizer(1e-5).minimize(gen_loss, var_list=gen_weights)
 
 print('Training...')
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
 
     test_feed_dict = {
-        img_cond: test_batch[0],
-        class_cond: test_batch[1],
-        diff_real: test_batch[2],
-        keep_prob: 1
+            'base_img:0': test_batch[0],
+            'class_cond:0': test_batch[1],
+            'diff_real:0': test_batch[2],
+            'keep_prob:0': 1
     }
-
-    # Write the ground truth images
-    gt_summary = sess.run(gt_summary_op, feed_dict=test_feed_dict)
-    writer.add_summary(gt_summary, 0)
-    writer.flush()
 
     for epoch in range(params['epochs']):
         print('Epoch %d/%d' % (epoch + 1, params['epochs'])) 
         for i, (cond_img, cond_class, real_diff) in zip(range(params['steps_per_epoch']), training_batches):
             print('Batch %d/%d' % (i + 1, params['steps_per_epoch']), end='\r')
             feed_dict = {
-                img_cond: cond_img,
-                class_cond: cond_class,
-                diff_real: real_diff,
-                keep_prob: 0.5
+                    'base_img:0': cond_img,
+                    'class_cond:0': cond_class,
+                    'diff_real:0': real_diff,
+                    'keep_prob:0': 0.5
             }
-            disc_opt.run(feed_dict)
-            gen_opt.run(feed_dict)
+            train(epoch*params['steps_per_epoch'] + i, sess, writer, feed_dict)
 
-            train_summary = sess.run(train_summary_op, feed_dict=feed_dict)
-            # Log to tensorboard
-            writer.add_summary(train_summary, epoch * params['steps_per_epoch'] + i)
-            writer.flush()
-
-        # now sample the validation losses and images
-        test_summary = sess.run(test_summary_op, feed_dict=test_feed_dict)
-        writer.add_summary(test_summary, epoch * params['steps_per_epoch'])
-        writer.flush()
         print()
+        test(epoch, sess, writer, test_feed_dict)
