@@ -21,38 +21,25 @@ params = config.get_params(layer_num)
 
 # Get the data
 print('Reading data...')
-(training_data, test_data) = config.build_data_pipeline(params)
-test_batch = next(config.format_batches(params,test_data)) # We will only use the first batch for sampling validations
-
-training_batches = config.format_batches(params, training_data)
+data_pipeline = config.build_data_pipeline(params, test=False)
 
 print('Building model...')
-train, test = config.build_model(params)
+train, _ = config.build_model(params, data_pipeline)
 
 writer = tf.summary.FileWriter(os.path.join(params['output_dir'], 'logs'), graph=tf.get_default_graph())
 
 print('Training...')
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
-
-    test_feed_dict = {
-            'base_img:0': test_batch[0],
-            'class_cond:0': test_batch[1],
-            'diff_real:0': test_batch[2],
-            'keep_prob:0': 1
-    }
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(coord=coord)
 
     for epoch in range(params['epochs']):
         print('Epoch %d/%d' % (epoch + 1, params['epochs'])) 
-        for i, (cond_img, cond_class, real_diff) in zip(range(params['steps_per_epoch']), training_batches):
+        for i in range(params['steps_per_epoch']):
             print('Batch %d/%d' % (i + 1, params['steps_per_epoch']), end='\r')
-            feed_dict = {
-                    'base_img:0': cond_img,
-                    'class_cond:0': cond_class,
-                    'diff_real:0': real_diff,
-                    'keep_prob:0': 0.5
-            }
-            train(epoch*params['steps_per_epoch'] + i, sess, writer, feed_dict)
-
+            train(epoch*params['steps_per_epoch'] + i, sess, writer)
         print()
-        test(epoch, sess, writer, test_feed_dict)
+
+    coord.request_stop()
+    coord.join(threads)
