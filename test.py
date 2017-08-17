@@ -1,6 +1,7 @@
 import argparse
 import importlib
 import os
+import time
 
 import tensorflow as tf
 
@@ -21,16 +22,14 @@ params = config.get_params(layer_num)
 
 # Get the data
 print('Reading data...')
-data_pipeline = None
-with tf.name_scope('data_pipline'):
-    data_pipeline = config.build_data_pipeline(params, test=False)
+data_pipeline = config.build_data_pipeline(params, test=True)
 
 print('Building model...')
-train, _ = config.build_model(params, data_pipeline)
+_, test = config.build_model(params, data_pipeline)
 
-writer = tf.summary.FileWriter(os.path.join(params['output_dir'], 'logs'), graph=tf.get_default_graph())
+writer = tf.summary.FileWriter(os.path.join(params['output_dir'], 'logs'))
 
-saver = tf.train.Saver(max_to_keep=0)
+saver = tf.train.Saver()
 
 print('Training...')
 with tf.Session() as sess:
@@ -38,15 +37,15 @@ with tf.Session() as sess:
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(coord=coord)
 
-    for epoch in range(params['epochs']):
-        print('Epoch %d/%d' % (epoch + 1, params['epochs'])) 
-        for i in range(params['steps_per_epoch']):
-            print('Batch %d/%d' % (i + 1, params['steps_per_epoch']), end='\r')
-#            print()
-#            print(sess.run('data_pipline/io_size:0'))
-            train(epoch*params['steps_per_epoch'] + i, sess, writer)
-        print()
-        saver.save(sess, (params['output_dir'] + '/checkpoints/e_%04d.ckpt') % (epoch + 1))
+    for epoch in range(1, params['epochs'] + 1):
+        print('Waiting for Epoch %d' % epoch)
+        checkpoint_path = params['output_dir'] + '/checkpoints/e_%04d.ckpt' % epoch 
+        while not os.path.exists(checkpoint_path + '.index'):
+            time.sleep(15)
+        time.sleep(1)
+        print('Evaluating Epoch %d/%d' % (epoch, params['epochs'])) 
+        saver.restore(sess, checkpoint_path)
+        test(epoch, sess, writer)
 
     coord.request_stop()
     coord.join(threads)

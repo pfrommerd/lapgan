@@ -23,7 +23,7 @@ PARAMS_L1 = {'layer_num': 0,
           'batch_size': 128,
           'test_batch_size': 128,
           'sample_img_num': 16,
-          'preprocess_threads': 4,
+          'preprocess_threads': 2,
           'use_voronoi': False}
 
 PARAMS_L2 = {'layer_num': 1,
@@ -108,8 +108,8 @@ def build_model(params, inputs):
     real_accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(real_output['prob_class'], 1), tf.argmax(real_output['prob_class'], 1)), tf.float32))
     fake_accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(fake_output['prob_class'], 1), tf.argmax(fake_output['prob_class'], 1)), tf.float32))
 
-    fake_diff_summary = tf.summary.image('fake_diff', gen_output['diff_img'])
-    real_diff_summary = tf.summary.image('real_diff', diff_real)
+    fake_diff_summary = utils.diff_summary('fake_diff', gen_output['diff_img'])
+    real_diff_summary = utils.diff_summary('real_diff', diff_real)
 
     fake_img_summary = tf.summary.image('fake_img', base_img + gen_output['diff_img'])
     real_img_summary = tf.summary.image('real_img', base_img + diff_real)
@@ -133,7 +133,7 @@ def build_model(params, inputs):
 
     train_summaries_op = tf.summary.merge([real_summary, fake_summary, disc_loss_summary, gen_loss_summary])
 
-    disc_opt = tf.train.AdamOptimizer(1.05e-4).minimize(disc_loss, var_list=disc_weights)
+    disc_opt = tf.train.AdamOptimizer(1e-4).minimize(disc_loss, var_list=disc_weights)
     gen_opt = tf.train.AdamOptimizer(1e-4).minimize(gen_loss, var_list=disc_weights)
 
     def train(iteration, sess, writer):
