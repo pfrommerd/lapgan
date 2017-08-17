@@ -75,6 +75,6 @@ def _file_pipeline(params, files, test=False):
                             capacity=100 * params['batch_size'], min_after_dequeue=10 * params['batch_size'])
 
     noise = tf.random_normal(tf.shape(batch_base_img)[:-1], stddev=params['noise'], name='noise')
-    keep_prob = tf.constant(1) if test else tf.constant(0.5)
+    keep_prob = tf.constant(1.0) if test else tf.constant(0.5)
 
     return {'base_img': batch_base_img, 'diff_real': batch_real_diff, 'class_cond': batch_label, 'noise': noise, 'keep_prob': keep_prob}
