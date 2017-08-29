@@ -1,64 +1,63 @@
 import tensorflow as tf
+import numpy as np
 
-import dataio
 import itertools
 import utils
+import time
 
 TRAIN_FILES = ['data_batch_1.bin', 'data_batch_2.bin',
                'data_batch_3.bin', 'data_batch_4.bin',
                'data_batch_5.bin']
 TEST_FILES = ['test_batch.bin']
 
+NUM_IMAGE_BYTES = 32 * 32 * 3
+NUM_LABEL_BYTES = 1
+NUM_RECORD_BYTES = NUM_IMAGE_BYTES + NUM_LABEL_BYTES
+
 # Downloads and processes data to a subdirectory in directory
 # returns the training data and testing data pyramids as two lists in a tuple
-def build_data_pipeline(params, test=False):
+def build_data_pipeline(params, preload=True, test=False):
     data_directory = params['data_dir']
     
-    train_files = dataio.join_files(data_directory, TRAIN_FILES)
-    test_files = dataio.join_files(data_directory, TEST_FILES)
+    train_files = utils.join_files(data_directory, TRAIN_FILES)
+    test_files = utils.join_files(data_directory, TEST_FILES)
 
-    dataio.cond_wget_untar(data_directory,
+    utils.cond_wget_untar(data_directory,
                            train_files + test_files,
                            'https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz',
-                            moveFiles=zip(dataio.join_files('cifar-10-batches-bin', TRAIN_FILES + TEST_FILES),
-                                            dataio.join_files(data_directory, TRAIN_FILES + TEST_FILES)))
+                            moveFiles=zip(utils.join_files('cifar-10-batches-bin', TRAIN_FILES + TEST_FILES),
+                                            utils.join_files(data_directory, TRAIN_FILES + TEST_FILES)))
 
     # Images are 32x32x3 bytes, with an extra byte at the start for the label
     if test:
-        return _file_pipeline(params, dataio.join_files(data_directory, TEST_FILES), test=True)
+        return _file_pipeline(params, utils.join_files(data_directory, TEST_FILES), preload=preload, test=True)
     else:
-        return _file_pipeline(params, dataio.join_files(data_directory, TRAIN_FILES))
+        return _file_pipeline(params, utils.join_files(data_directory, TRAIN_FILES), preload=preload)
 
-def _file_pipeline(params, files, test=False):
-    image_bytes = 32 * 32 * 3
-    label_bytes = 1
-    num_record_bytes = image_bytes + label_bytes
+def _file_pipeline(params, files, preload=None, test=False):
+    record_pipeline = None
+    # Load into a numpy array
+    buf = np.concatenate([np.fromfile(f, dtype=np.uint8) for f in files])
+    buf = np.reshape(buf, (-1, NUM_RECORD_BYTES))
+    # Keep rows starting with a 0
+    #buf = buf[buf[:,0] == 0, :]
 
-    reader = tf.FixedLengthRecordReader(record_bytes=num_record_bytes)
+    # Constantly load the buffer into a queue
+    io_queue = tf.FIFOQueue(params['batch_size'], [tf.uint8])
+    io_enqueue = io_queue.enqueue_many(tf.constant(buf))
 
-    _, value = reader.read(tf.train.string_input_producer(files))
-    record_bytes = tf.reshape(tf.decode_raw(value, tf.uint8), (num_record_bytes,))
-    label = tf.cast(tf.strided_slice(record_bytes, [0], [label_bytes]), tf.int32)
-
-    # Filter the record
-    label, record_bytes = utils.filter_inputs([label, record_bytes], [(1,), (num_record_bytes,)], \
-                                        lambda x: tf.equal(x[0][0], 0))
-
-
-    # The data queue related to file IO
-    io_queue = tf.FIFOQueue(params['batch_size'], [tf.int32, tf.uint8])
-    queue_size = io_queue.size(name='io_size')
-    print(queue_size.name)
-    io_enqueue = io_queue.enqueue_many([label, record_bytes])
-
-    io_runner = tf.train.QueueRunner(io_queue, [io_enqueue] * 2)
+    io_runner = tf.train.QueueRunner(io_queue, [io_enqueue])
     tf.train.add_queue_runner(io_runner)
 
-    label, record_bytes = io_queue.dequeue()
+    record_pipeline = io_queue.dequeue()
 
+    return _process_pipeline(params, record_pipeline, test)
+
+def _process_pipeline(params, record_pipeline, test=False):
+    label = tf.cast(tf.strided_slice(record_pipeline, [0], [NUM_LABEL_BYTES]), tf.int32)
     label = tf.reshape(tf.one_hot(label,10), [10])
-    depth_major = tf.reshape(tf.strided_slice(record_bytes, [label_bytes],
-                                [label_bytes + image_bytes]),
+    depth_major = tf.reshape(tf.strided_slice(record_pipeline, [NUM_LABEL_BYTES],
+                                [NUM_LABEL_BYTES + NUM_IMAGE_BYTES]),
                                 [3, 32, 32])
 
     image = tf.cast(tf.transpose(depth_major, [1, 2, 0]), tf.float32) / 255.0

@@ -9,7 +9,7 @@ import tensorflow as tf
 parser = argparse.ArgumentParser(description='Train a network on the CIFAR10 dataset')
 parser.add_argument('--layernum', default=0,
                     help='The layer number to train') 
-parser.add_argument('--config', default='config.cifar',
+parser.add_argument('--config', default='config.cifar_vae',
                     help='The name of the config to use')
 args = parser.parse_args()
 
@@ -22,7 +22,7 @@ params = config.get_params(layer_num)
 
 # Get the data
 print('Reading data...')
-data_pipeline = config.build_data_pipeline(params, test=True)
+data_pipeline = config.build_data_pipeline(params, preload=True, test=True)
 
 print('Building model...')
 _, test = config.build_model(params, data_pipeline)

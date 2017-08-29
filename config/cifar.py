@@ -1,4 +1,3 @@
-import dataio
 import utils
 
 import os
@@ -108,13 +107,13 @@ def build_model(params, inputs):
     real_accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(real_output['prob_class'], 1), tf.argmax(real_output['prob_class'], 1)), tf.float32))
     fake_accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(fake_output['prob_class'], 1), tf.argmax(fake_output['prob_class'], 1)), tf.float32))
 
-    fake_diff_summary = utils.diff_summary('fake_diff', gen_output['diff_img'])
-    real_diff_summary = utils.diff_summary('real_diff', diff_real)
+    fake_diff_summary = utils.diff_summary('fake_diff', gen_output['diff_img'], max_outputs=16)
+    real_diff_summary = utils.diff_summary('real_diff', diff_real, max_outputs=16)
 
-    fake_img_summary = tf.summary.image('fake_img', base_img + gen_output['diff_img'])
-    real_img_summary = tf.summary.image('real_img', base_img + diff_real)
+    fake_img_summary = tf.summary.image('fake_img', base_img + gen_output['diff_img'], max_outputs=16)
+    real_img_summary = tf.summary.image('real_img', base_img + diff_real, max_outputs=16)
 
-    base_img_summary = tf.summary.image('input_img', base_img)
+    base_img_summary = tf.summary.image('input_img', base_img, max_outputs=16)
 
 
     disc_loss_test_summary = tf.summary.scalar('disc_test_loss', disc_loss)

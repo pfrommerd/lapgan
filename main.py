@@ -8,7 +8,7 @@ import tensorflow as tf
 parser = argparse.ArgumentParser(description='Train a network on the CIFAR10 dataset')
 parser.add_argument('--layernum', default=0,
                     help='The layer number to train') 
-parser.add_argument('--config', default='config.cifar',
+parser.add_argument('--config', default='config.cifar_vae',
                     help='The name of the config to use')
 args = parser.parse_args()
 
@@ -19,21 +19,21 @@ config = importlib.import_module(configModule)
 
 params = config.get_params(layer_num)
 
-# Get the data
-print('Reading data...')
-data_pipeline = None
-with tf.name_scope('data_pipline'):
-    data_pipeline = config.build_data_pipeline(params, test=False)
-
-print('Building model...')
-train, _ = config.build_model(params, data_pipeline)
-
-writer = tf.summary.FileWriter(os.path.join(params['output_dir'], 'logs'), graph=tf.get_default_graph())
-
-saver = tf.train.Saver(max_to_keep=0)
-
-print('Training...')
 with tf.Session() as sess:
+    # Get the data
+    print('Reading data...')
+    data_pipeline = None
+    with tf.name_scope('data_pipline'):
+        data_pipeline = config.build_data_pipeline(params, preload=True, test=False)
+
+    print('Building model...')
+    train, _ = config.build_model(params, data_pipeline)
+
+    writer = tf.summary.FileWriter(os.path.join(params['output_dir'], 'logs'), graph=tf.get_default_graph())
+
+    saver = tf.train.Saver(max_to_keep=0)
+
+    print('Training...')
     sess.run(tf.global_variables_initializer())
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(coord=coord)
