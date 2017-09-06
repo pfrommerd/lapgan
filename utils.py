@@ -19,6 +19,10 @@ def dense(weights, bias=None):
     else:
         return lambda x: tf.matmul(x, weights)
 
+def logits_sigmoid_cross_entropy(logits, target):
+    values = tf.cast(tf.fill(tf.stack([tf.shape(logits)[0], 1]), target), tf.float32)
+    return tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=values)
+
 def diff_summary(name, diff, max_outputs=3):
    return tf.summary.image(name, tf.cast(255 * (diff + 1.0) / 2.0, tf.uint8), max_outputs=max_outputs)
 

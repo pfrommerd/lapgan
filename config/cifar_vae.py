@@ -47,9 +47,6 @@ PARAMS_L2 = {'layer_num': 1,
 def get_params(layer_num):
     return PARAMS_L1 if layer_num == 0 else PARAMS_L2
 
-# Will be called by main script
-from dataloaders.cifar import build_data_pipeline
-
 def build_model(params, inputs):
     # Inputs
     base_img = inputs['base_img']
@@ -64,8 +61,7 @@ def build_model(params, inputs):
     diff_gen = gen_output['diff_img']
 
     gen_loss = tf.reduce_sum(tf.square(diff_gen - diff_real))
-    encoding_loss = tf.reduce_sum(tf.abs(gen_output['encoded']))
-    loss = gen_loss + 0.05 * encoding_loss
+    loss = gen_loss
 
     fake_diff_summary = utils.diff_summary('fake_diff', gen_output['diff_img'])
     real_diff_summary = utils.diff_summary('real_diff', diff_real)
@@ -75,17 +71,15 @@ def build_model(params, inputs):
 
     base_img_summary = tf.summary.image('input_img', base_img)
 
-    encoding_loss_test_summary = tf.summary.scalar('encoding_test_loss', encoding_loss)
     gen_loss_test_summary = tf.summary.scalar('gen_test_loss', gen_loss)
     loss_test_summary = tf.summary.scalar('test_loss', loss)
 
     test_summaries_op = tf.summary.merge_all()
 
-    encoding_loss_summary = tf.summary.scalar('encoding_loss', encoding_loss)
     gen_loss_summary = tf.summary.scalar('gen_loss', gen_loss)
     loss_summary = tf.summary.scalar('loss', loss)
 
-    train_summaries_op = tf.summary.merge([gen_loss_summary, encoding_loss_summary, loss_summary])
+    train_summaries_op = tf.summary.merge([gen_loss_summary, loss_summary])
 
     gen_weights = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='autoencoder')
     gen_opt = tf.train.AdamOptimizer(1e-4).minimize(gen_loss, var_list=gen_weights)
@@ -99,44 +93,44 @@ def build_model(params, inputs):
         writer.add_summary(test_summary, iteration)
         writer.flush()
 
-    return train, test
+    return diff_gen, train, test
 
 def _build_autoencoder(inputs, data_shape, num_planes, latent_dim):
     base_img = inputs['base_img']
+    class_cond = inputs['class_cond']
 
+    # We don't actually need a bias here as we are learning a bitplane per class anyways
+    class_weights = tf.get_variable('class_weights', [10, data_shape[0] * data_shape[1]])
+    class_vec = utils.dense(class_weights)(class_cond)
+    class_plane = tf.nn.relu(tf.reshape(class_vec, [-1, data_shape[0], data_shape[1], 1]))
 
+    # Now concatenate the tensors
+    stacked_input = tf.concat([base_img, class_plane], axis=3)
 
-    d1_weights = tf.get_variable('d1_weights', [7, 7, data_shape[2], num_planes])
-    d1_bias = tf.get_variable('d1_bias', [num_planes])
-    d1 = utils.conv2d(d1_weights, bias=d1_bias)(base_img)
+    c1_weights = tf.get_variable('d1_weights', [7, 7, data_shape[2] + 1, num_planes])
+    c1_bias = tf.get_variable('d1_bias', [num_planes])
+    c1 = utils.conv2d(c1_weights, bias=c1_bias)(stacked_input)
 
-    d2_weights = tf.get_variable('d2_weights', [7, 7, num_planes, num_planes])
-    d2_bias = tf.get_variable('d2_bias', [num_planes])
-    d2 = utils.conv2d(d2_weights, bias=d2_bias)(d1)
+    c2_weights = tf.get_variable('d2_weights', [7, 7, num_planes, num_planes])
+    c2_bias = tf.get_variable('d2_bias', [num_planes])
+    c2 = utils.conv2d(c2_weights, bias=c2_bias)(c1)
 
-    d2_flattened = tf.reshape(d2, (-1, data_shape[0]*data_shape[1]*num_planes))
+    c2_dropout = tf.nn.dropout(c2, inputs['keep_prob'])
 
-    d3_weights = tf.get_variable('d3_weights', [data_shape[0]*data_shape[1]*num_planes, latent_dim])
-    d3_bias = tf.get_variable('d3_bias', [latent_dim])
-    d3 = utils.dense(d3_weights, bias=d3_bias)(d2_flattened)
+    c3_weights = tf.get_variable('d3_weights', [7, 7, num_planes, num_planes])
+    c3_bias = tf.get_variable('d3_bias', [num_planes])
+    c3 = utils.conv2d(c3_weights, bias=c3_bias)(c2_dropout)
 
-    # Add the class data to the representation
-    h = tf.concat([d3, inputs['class_cond']], axis=1)
+    c4_weights = tf.get_variable('d4_weights', [7, 7, num_planes, num_planes])
+    c4_bias = tf.get_variable('d4_bias', [num_planes])
+    c4 = utils.conv2d(c4_weights, bias=c4_bias)(c3)
 
-    e1_weights = tf.get_variable('e1_weights', [latent_dim + 10, data_shape[0]*data_shape[1]*num_planes])
-    e1_bias = tf.get_variable('e1_bias', [data_shape[0]*data_shape[1]*num_planes])
-    e1 = utils.dense(e1_weights, bias=e1_bias)(h)
+    c4_dropout = tf.nn.dropout(c4, inputs['keep_prob'])
 
-    e1_reshaped = tf.reshape(e1, (-1, data_shape[0], data_shape[1], num_planes))
+    c5_weights = tf.get_variable('d5_weights', [7, 7, num_planes, 3])
+    c5_bias = tf.get_variable('d5_bias', [3])
+    c5 = utils.conv2d(c5_weights, bias=c5_bias)(c4_dropout)
 
-    e2_weights = tf.get_variable('e2_weights', [7, 7, num_planes, num_planes])
-    e2_bias = tf.get_variable('e2_bias', [num_planes])
-    e2 = utils.conv2d_transpose(e2_weights, (data_shape[0], data_shape[1], num_planes), bias=e2_bias)(e1_reshaped)
+    diff_img = c5
 
-    e3_weights = tf.get_variable('e3_weights', [7, 7, num_planes, data_shape[2]])
-    e3_bias = tf.get_variable('e3_bias', [data_shape[2]])
-    e3 = utils.conv2d_transpose(e3_weights, (data_shape[0], data_shape[1], data_shape[2]), bias=e3_bias)(e2)
-
-    diff_img = e3
-
-    return {'encoded': h, 'reconst_img': e1, 'diff_img': diff_img}
+    return {'diff_img': diff_img}
