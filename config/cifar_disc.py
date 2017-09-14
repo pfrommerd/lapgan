@@ -77,6 +77,7 @@ def build_model(params, inputs, reuse=False, use_weights=None):
 
 
     if use_weights is not None:
+        weights = use_weights
         opt = tf.train.AdamOptimizer(1e-4).minimize(loss, var_list=use_weights)
     else:
         weights = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='disc')
@@ -92,7 +93,7 @@ def build_model(params, inputs, reuse=False, use_weights=None):
         writer.add_summary(test_summary, iteration)
         writer.flush()
 
-    return prob, train, test
+    return prob, train, test, train_summaries_op, loss, weights
 
 def _build_discriminator(inputs, data_shape, nplanes):
     diff_input = inputs['diff_img']

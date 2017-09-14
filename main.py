@@ -49,9 +49,18 @@ with tf.Session() as sess:
     disc_aux_inputs = {'base_img':data_pipeline['base_img'], 'diff_img':aux_gen,
             'keep_prob':data_pipeline['keep_prob'], 'name': 'aux', 'target_prob':0}
     
-    _, disc_real_train, _ = disc.build_model(params, disc_real_inputs)
-    _, disc_aux_train, _ = disc.build_model(params, disc_aux_inputs, reuse=True)
-    _, disc_gen_train, _ = disc.build_model(params, disc_gen_inputs, reuse=True, use_weights=gen_weights)
+    _, _, _, real_summary, disc_real_loss, real_weights = disc.build_model(params, disc_real_inputs)
+    _, _, _, aux_summary, disc_aux_loss, aux_weights = disc.build_model(params, disc_aux_inputs, reuse=True)
+    _, _, _, gen_summary, disc_gen_loss, gen_weights = disc.build_model(params, disc_gen_inputs, reuse=True, use_weights=gen_weights)
+
+    combined_loss = disc_real_loss + disc_aux_loss + disc_gen_loss
+    combined_summary = tf.summary.merge([real_summary, aux_summary, gen_summary])
+    opt = tf.train.AdamOptimizer(1e-4).minimize(combined_loss, var_list=[real_weights, aux_weights, gen_weights])
+
+    def train(iteration, sess, writer):
+        _, train_summary = sess.run([opt, combined_summary])
+        writer.add_summary(train_summary, iteration)
+
 
     writer = tf.summary.FileWriter(os.path.join(params['output_dir'], 'logs'), graph=tf.get_default_graph())
 
@@ -67,9 +76,10 @@ with tf.Session() as sess:
         for i in range(params['steps_per_epoch']):
             print('Batch %d/%d' % (i + 1, params['steps_per_epoch']), end='\r')
             aux_train(epoch*params['steps_per_epoch'] + i, sess, writer)
-            disc_aux_train(epoch*params['steps_per_epoch'] + i, sess, writer)
-            disc_real_train(epoch*params['steps_per_epoch'] + i, sess, writer)
-            disc_gen_train(epoch*params['steps_per_epoch'] + i, sess, writer)
+            train(epoch*params['steps_per_epoch'] + i, sess, writer)
+            #disc_aux_train(epoch*params['steps_per_epoch'] + i, sess, writer)
+            #disc_real_train(epoch*params['steps_per_epoch'] + i, sess, writer)
+            #disc_gen_train(epoch*params['steps_per_epoch'] + i, sess, writer)
         print()
         saver.save(sess, (params['output_dir'] + '/checkpoints/e_%04d.ckpt') % (epoch + 1))
 
